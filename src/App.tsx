@@ -31,11 +31,18 @@ declare global {
 }
 
 // ── 상수 ──
-const FONT_URL = "https://fonts.googleapis.com/css2?family=Jua&display=swap";
+const FONT_URL = "https://fonts.googleapis.com/css2?family=Jua&family=Gamja+Flower&family=Nanum+Gothic:wght@400;700&family=Noto+Sans+KR:wght@400;600;700&display=swap";
+const FONT_OPTIONS: {label:string; value:string}[] = [
+  {label:"Jua (둥글고 귀여운)", value:"'Jua','Apple SD Gothic Neo',sans-serif"},
+  {label:"Noto Sans KR (깔끔 가독성)", value:"'Noto Sans KR','Apple SD Gothic Neo',sans-serif"},
+  {label:"Nanum Gothic (단정함)", value:"'Nanum Gothic','Apple SD Gothic Neo',sans-serif"},
+  {label:"Gamja Flower (손글씨 감성)", value:"'Gamja Flower','Apple SD Gothic Neo',sans-serif"},
+];
+let globalFontFamily = FONT_OPTIONS[0].value;
 const FONT_FAMILY = "'Jua','Apple SD Gothic Neo',sans-serif";
 const ICON_URL = "https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.jpg";
 const STORAGE_KEY = "personas_v1";
-const DEFAULT_FONT_SIZE = 16;
+const DEFAULT_FONT_SIZE = 17;
 const grad = "linear-gradient(135deg,#6a8fff,#a56bff)";
 const glass: CSSProperties = { background:"rgba(255,255,255,0.65)", backdropFilter:"blur(16px)" };
 const BG: CSSProperties = { minHeight:"100vh", background:"linear-gradient(145deg,#c9b8f0 0%,#a8c4f0 40%,#b8d4f8 70%,#d4e8ff 100%)", position:"relative", overflow:"hidden" };
@@ -177,7 +184,7 @@ function TypingDots() {
 }
 
 // ── TransBlock ──
-function TransBlock({translation,alternatives,isMe}:{translation:string;alternatives:string[];isMe:boolean}) {
+function TransBlock({translation,alternatives,isMe,fontSize}:{translation:string;alternatives:string[];isMe:boolean;fontSize:number}) {
   const [open,setOpen]=useState(true);
   return (
     <div style={{marginTop:6,fontSize:11.5,color:isMe?"#a0c4ff":"#888",borderLeft:`2px solid ${isMe?"rgba(74,159,255,0.35)":"#ccc"}`,paddingLeft:8,lineHeight:1.7}}>
@@ -337,31 +344,45 @@ function EditModal({profile,onSave,onClose}:{profile:Persona;onSave:(p:Persona)=
 }
 
 // ── SettingsTab ──
-function SettingsTab({fontSize,setFontSize,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;onClearChat:()=>void;onClose:()=>void}) {
+function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;onClearChat:()=>void;onClose:()=>void}) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,padding:28,paddingBottom:36,fontFamily:FONT_FAMILY}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,padding:28,paddingBottom:36,fontFamily}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
         </div>
+        {/* 폰트 선택 */}
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>글꼴</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {FONT_OPTIONS.map(f=>(
+              <button key={f.value} onClick={()=>setFontFamily(f.value)}
+                style={{padding:"12px 14px",borderRadius:10,border:`1.5px solid ${fontFamily===f.value?"#6a8fff":"rgba(106,143,255,0.25)"}`,background:fontFamily===f.value?"rgba(106,143,255,0.1)":"#fafaff",cursor:"pointer",textAlign:"left",fontFamily:f.value,fontSize:16,color:fontFamily===f.value?"#3a5fff":"#333"}}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* 글자 크기 */}
         <div style={{marginBottom:28}}>
           <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>글자 크기</div>
           <div style={{display:"flex",alignItems:"center",gap:16}}>
             <button onClick={()=>setFontSize((s:number)=>Math.max(12,s-1))} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
             <div style={{flex:1,textAlign:"center"}}>
-              <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6}}>안녕, 오늘 어때?</div>
+              <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6,fontFamily}}>안녕, 오늘 어때? Hi there!</div>
               <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{fontSize}px</div>
             </div>
             <button onClick={()=>setFontSize((s:number)=>Math.min(24,s+1))} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
           </div>
           <input type="range" min={12} max={24} value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} style={{width:"100%",marginTop:12,accentColor:"#6a8fff"} as CSSProperties}/>
-          <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily:FONT_FAMILY}}>기본값으로 초기화 ({DEFAULT_FONT_SIZE}px)</button>
+          <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily}}>기본값으로 초기화 ({DEFAULT_FONT_SIZE}px)</button>
         </div>
+        {/* 채팅 삭제 */}
         <div style={{borderTop:"1px solid #f0f0f0",paddingTop:20}}>
           <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:12}}>대화 관리</div>
           <button onClick={()=>{if(window.confirm("대화 내용을 모두 삭제할까요?")){onClearChat();onClose();}}}
-            style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid #ffaaaa",background:"#fff5f5",cursor:"pointer",fontSize:14,color:"#e05555",fontFamily:FONT_FAMILY,fontWeight:600}}>
+            style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid #ffaaaa",background:"#fff5f5",cursor:"pointer",fontSize:14,color:"#e05555",fontFamily,fontWeight:600}}>
             대화 내용 전체 삭제
           </button>
         </div>
@@ -377,6 +398,9 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   const [showEdit,setShowEdit]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const [fontSize,setFontSize]=useState(DEFAULT_FONT_SIZE);
+  const [fontFamily,setFontFamily]=useState(FONT_OPTIONS[0].value);
+  useEffect(()=>{ globalFontSize = fontSize; },[fontSize]);
+  useEffect(()=>{ globalFontFamily = fontFamily; },[fontFamily]);
   const bottomRef=useRef<HTMLDivElement>(null);
   const personaRef=useRef<Persona>(persona);
   useEffect(()=>{personaRef.current=persona;},[persona]);
@@ -429,11 +453,11 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   }
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily:FONT_FAMILY}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily}}>
       {showEdit&&<EditModal profile={persona} onSave={p=>{updatePersona(persona.id,()=>p);setShowEdit(false);}} onClose={()=>setShowEdit(false)}/>}
-      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} onClearChat={()=>updatePersona(persona.id,p=>({...p,messages:[]}))} onClose={()=>setShowSettings(false)}/>}
+      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} onClearChat={()=>updatePersona(persona.id,p=>({...p,messages:[]}))} onClose={()=>setShowSettings(false)}/>}
       {/* Header */}
-      <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+      <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:20}}>
         <button onClick={onBack} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
         <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,color:"#6a8fff"}}>{persona.name[0]}</div>
         <div style={{flex:1}}>
@@ -450,7 +474,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
           return (
             <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
               {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name}</div>}
-              <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+              <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)",fontFamily}}>
                 {m.text}
                 {m.translation&&<TransBlock translation={m.translation} alternatives={m.alternatives} isMe={isMe}/>}
               </div>

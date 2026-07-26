@@ -92,16 +92,19 @@ function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
     ],
     generationConfig: { maxOutputTokens: 800, temperature: 0.9 }
   };
-  // gemini-1.5-flash → gemini-2.0-flash 로 변경 (최신 무료 모델)
-  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body)
-  }).then(r => r.json())
-    .then((d: Record<string, unknown>) => {
-      const candidates = d.candidates as {content:{parts:{text:string}[]}}[] | undefined;
-      return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  const doFetch = (retries: number): Promise<string> =>
+    fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) })
+      .then(r => {
+        if (r.status === 429 && retries > 0) {
+          return new Promise<string>(res => setTimeout(() => res(doFetch(retries-1)), 3000));
+        }
+        return r.json().then((d: Record<string, unknown>) => {
+          const candidates = d.candidates as {content:{parts:{text:string}[]}}[] | undefined;
+          return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        });
+      });
+  return doFetch(3);
 }
 
 function callClaude(system: string, msgs: ClaudeMsg[]): Promise<string> {

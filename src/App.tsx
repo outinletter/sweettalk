@@ -399,6 +399,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily:FONT_FAMILY}}>
       {showEdit&&<EditModal profile={persona} onSave={p=>{updatePersona(persona.id,()=>p);setShowEdit(false);}} onClose={()=>setShowEdit(false)}/>}
       {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} onClearChat={()=>updatePersona(persona.id,p=>({...p,messages:[]}))} onClose={()=>setShowSettings(false)}/>}
+      {/* Header */}
       <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
         <button onClick={onBack} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
         <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,color:"#6a8fff"}}>{persona.name[0]}</div>
@@ -409,7 +410,8 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
         <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:12,color:"#555",marginRight:4,fontFamily:FONT_FAMILY}}>편집</button>
         <button onClick={()=>setShowSettings(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16,color:"#888"}}>⚙️</button>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:14}}>
+      {/* Messages */}
+      <div style={{flex:1,overflowY:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:14,paddingBottom:8}}>
         {persona.messages.map((m,i)=>{
           const isMe=m.role==="user";
           return (
@@ -430,7 +432,20 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
         )}
         <div ref={bottomRef}/>
       </div>
-      <div style={{background:"#fff",borderTop:"1px solid #eee",padding:"12px 14px",display:"flex",gap:10,alignItems:"flex-end",flexShrink:0}}>
+      {/* Input — 하단 고정, 안전 영역(노치/홈바) 고려 */}
+      <div style={{
+        background:"#fff",
+        borderTop:"1px solid #eee",
+        padding:"10px 14px",
+        paddingBottom:"calc(10px + env(safe-area-inset-bottom, 0px))",
+        display:"flex",
+        gap:10,
+        alignItems:"flex-end",
+        flexShrink:0,
+        position:"sticky",
+        bottom:0,
+        zIndex:10,
+      }}>
         <textarea value={input} onChange={e=>setInput(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}}
           placeholder={`${persona.name}에게 메시지 보내기...`} rows={1}

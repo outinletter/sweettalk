@@ -22,6 +22,7 @@ interface TransResult { translation: string; alternatives: string[]; }
 interface StorageResult { value: string; }
 declare global {
   interface Window {
+    __GEMINI_KEY__?: string;
     storage: {
       get(key: string, shared: boolean): Promise<StorageResult|null>;
       set(key: string, value: string, shared: boolean): Promise<void>;
@@ -72,8 +73,12 @@ async function cacheGet(k: string): Promise<TransResult|null> {
 function cacheSet(k: string, v: TransResult): void { window.storage.set(k,JSON.stringify(v),true).catch(()=>{}); }
 
 // ── Claude API ──
+function getWinKey(k: keyof Window): string {
+  return (window[k] as string) ?? "";
+}
+
 function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
-  const key = (window as Record<string,string>)["__GEMINI_KEY__"] ?? "";
+  const key = getWinKey("__GEMINI_KEY__");
   const history = msgs.slice(0,-1).map(m=>({
     role: m.role==="assistant" ? "model" : "user",
     parts: [{text: m.content}]
@@ -99,7 +104,7 @@ function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
 }
 
 function callClaude(system: string, msgs: ClaudeMsg[]): Promise<string> {
-  const geminiKey = (window as Record<string,string>)["__GEMINI_KEY__"];
+  const geminiKey = getWinKey("__GEMINI_KEY__");
   if (geminiKey) return callGemini(system, msgs);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   return fetch("https://api.anthropic.com/v1/messages", {

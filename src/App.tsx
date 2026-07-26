@@ -73,9 +73,17 @@ function cacheSet(k: string, v: TransResult): void { window.storage.set(k,JSON.s
 
 // ── Claude API ──
 function callClaude(system: string, msgs: ClaudeMsg[]): Promise<string> {
-  return fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,system,messages:msgs})
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // 배포 환경에서 window.__ANTHROPIC_KEY__ 로 주입 (index.html에서 설정)
+  const key = (window as unknown as Record<string,string>)["__ANTHROPIC_KEY__"];
+  if (key) {
+    headers["x-api-key"] = key;
+    headers["anthropic-version"] = "2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+  return fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST", headers,
+    body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:800, system, messages:msgs})
   }).then(r=>r.json())
     .then((d:{content?:{text?:string}[]})=>(d.content||[]).map(c=>c.text||"").join(""));
 }

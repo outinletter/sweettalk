@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>SweetTalk</title>
+
+    <!-- 홈 화면 아이콘 (iOS / Android) -->
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.png" />
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.png" />
+
+    <!-- PWA: 홈 화면에서 앱처럼 실행 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SweetTalk" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#c9b8f0" />
+
+    <!-- Jua 폰트 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
+
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Jua', 'Apple SD Gothic Neo', sans-serif; }
+      #root { width: 100%; max-width: 500px; margin: 0 auto; min-height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

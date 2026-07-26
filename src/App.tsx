@@ -75,7 +75,7 @@ function buildSystem(p) {
 
 function cacheKey(t){ return "tr:"+t.trim().toLowerCase().replace(/\s+/g," ").slice(0,180); }
 function cacheGet(k){ return storageGet(k,true).then(r=>r?JSON.parse(r.value):null).catch(()=>null); }
-function cacheSet(k,v){ window.storage.set(k,JSON.stringify(v),true).catch(()=>{}); }
+function cacheSet(k,v){ storageGet.set(k,JSON.stringify(v),true).catch(()=>{}); }
 
 function translateWithAlts(text) {
   const key = cacheKey(text);
@@ -430,7 +430,7 @@ async function savePersonas(list) {
   try {
     // messages 가 너무 길면 최근 40개만 저장
     const trimmed = list.map(p=>({...p, messages: p.messages.slice(-40)}));
-    await window.storage.set(STORAGE_KEY, JSON.stringify(trimmed), false);
+    await storageGet.set(STORAGE_KEY, JSON.stringify(trimmed), false);
   } catch(e) {}
 }
 

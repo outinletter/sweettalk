@@ -1,4 +1,33 @@
-import { storageGet, storageSet } from "./storage";
+import { useState, useRef, useEffect, useCallback } from "react";
+
+// ── 타입 정의 ──
+interface Message {
+  role: "user" | "ai";
+  text: string;
+  translation: string;
+  alternatives: string[];
+}
+
+interface Persona {
+  id: string;
+  gender: string;
+  name: string;
+  age: string;
+  personality: string;
+  tone: string;
+  interest: string;
+  messages: Message[];
+}
+
+interface ClaudeMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface TranslationResult {
+  translation: string;
+  alternatives: string[];
+}
 const FONT_URL = "https://fonts.googleapis.com/css2?family=Jua&display=swap";
 const FONT_FAMILY = "'Jua', 'Apple SD Gothic Neo', sans-serif";
 const ICON_URL = "https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.png";
@@ -50,22 +79,27 @@ function FontLoader() {
   return null;
 }
 
+/* ── BG 블롭 — 타입 명시 ── */
 function Blobs() {
+  const items: [number, number, number, number, string][] = [
+    [260,260,-60,-60,"l"],[180,180,40,-50,"r"],
+    [200,200,-60,30,"rb"],[120,120,80,-30,"lb"]
+  ];
   return <>
-    {[[260,260,-60,-60,"l"],[180,180,40,-50,"r"],[200,200,-60,30,"rb"],[120,120,80,-30,"lb"]].map(([w,h,tb,lr,k])=>(
+    {items.map(([w,h,tb,lr,k])=>(
       <div key={k} style={{position:"absolute",width:w,height:h,borderRadius:"50%",background:"rgba(255,255,255,0.15)",
-        ...(k.includes("r")?{right:Math.abs(lr)}:{left:Math.abs(lr)}),
-        ...(k.includes("b")?{bottom:Math.abs(tb)}:{top:Math.abs(tb)}),pointerEvents:"none"}}/>
+        ...(k.includes("r")?{right:Math.abs(lr as number)}:{left:Math.abs(lr as number)}),
+        ...(k.includes("b")?{bottom:Math.abs(tb as number)}:{top:Math.abs(tb as number)}),pointerEvents:"none"}}/>
     ))}
   </>;
 }
 
 /* ── API ── */
-function callClaude(system, msgs) {
+function callClaude(system: string, msgs: ClaudeMessage[]): Promise<string> {
   return fetch("https://api.anthropic.com/v1/messages",{
     method:"POST", headers:{"Content-Type":"application/json"},
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,system,messages:msgs})
-  }).then(r=>r.json()).then(d=>(d.content||[]).map(c=>c.text||"").join(""));
+  }).then(r=>r.json()).then((d: {content?: {text?: string}[]})=>(d.content||[]).map(c=>c.text||"").join(""));
 }
 
 function buildSystem(p) {
@@ -73,11 +107,15 @@ function buildSystem(p) {
   return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON.`;
 }
 
-function cacheKey(t){ return "tr:"+t.trim().toLowerCase().replace(/\s+/g," ").slice(0,180); }
-function cacheGet(k){ return storageGet(k,true).then(r=>r?JSON.parse(r.value):null).catch(()=>null); }
-function cacheSet(k,v){ storageGet.set(k,JSON.stringify(v),true).catch(()=>{}); }
+function cacheKey(t: string): string { return "tr:"+t.trim().toLowerCase().replace(/\s+/g," ").slice(0,180); }
+function cacheGet(k: string): Promise<TranslationResult|null> {
+  return window.storage.get(k,true).then((r: {value:string}|null)=>r?JSON.parse(r.value):null).catch(()=>null);
+}
+function cacheSet(k: string, v: TranslationResult): void {
+  window.storage.set(k,JSON.stringify(v),true).catch(()=>{});
+}
 
-function translateWithAlts(text) {
+function translateWithAlts(text: string): Promise<TranslationResult> {
   const key = cacheKey(text);
   return cacheGet(key).then(cached=>{
     if(cached) return cached;
@@ -421,7 +459,7 @@ const STORAGE_KEY = "personas_v1";
 
 async function loadPersonas() {
   try {
-    const r = await storageGet(STORAGE_KEY, false);
+    const r = await window.storage.get(STORAGE_KEY, false);
     return r ? JSON.parse(r.value) : [];
   } catch(e) { return []; }
 }
@@ -430,7 +468,7 @@ async function savePersonas(list) {
   try {
     // messages 가 너무 길면 최근 40개만 저장
     const trimmed = list.map(p=>({...p, messages: p.messages.slice(-40)}));
-    await storageGet.set(STORAGE_KEY, JSON.stringify(trimmed), false);
+    await window.storage.set(STORAGE_KEY, JSON.stringify(trimmed), false);
   } catch(e) {}
 }
 

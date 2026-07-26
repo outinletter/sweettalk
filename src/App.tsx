@@ -30,7 +30,7 @@ interface TranslationResult {
 }
 const FONT_URL = "https://fonts.googleapis.com/css2?family=Jua&display=swap";
 const FONT_FAMILY = "'Jua', 'Apple SD Gothic Neo', sans-serif";
-const ICON_URL = "https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.png";
+const ICON_URL = "https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.jpg";
 
 /* ── 상수 ── */
 const STEP_KEYS = ["gender","name","age","personality","tone","interest"];

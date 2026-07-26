@@ -92,7 +92,7 @@ function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
     ],
     generationConfig: { maxOutputTokens: 800, temperature: 0.9 }
   };
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`;
   const doFetch = (retries: number): Promise<string> =>
     fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) })
       .then(r => {

@@ -92,7 +92,8 @@ function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
     ],
     generationConfig: { maxOutputTokens: 800, temperature: 0.9 }
   };
-  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+  // gemini-1.5-flash → gemini-2.0-flash 로 변경 (최신 무료 모델)
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(body)

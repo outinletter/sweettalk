@@ -27,7 +27,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_ANTHROPIC_KEY: ${{ secrets.VITE_ANTHROPIC_KEY }}
+          VITE_GEMINI_KEY: ${{ secrets.VITE_GEMINI_KEY }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

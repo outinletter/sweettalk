@@ -72,20 +72,44 @@ async function cacheGet(k: string): Promise<TransResult|null> {
 function cacheSet(k: string, v: TransResult): void { window.storage.set(k,JSON.stringify(v),true).catch(()=>{}); }
 
 // ── Claude API ──
+function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
+  const key = (window as Record<string,string>)["__GEMINI_KEY__"] ?? "";
+  const history = msgs.slice(0,-1).map(m=>({
+    role: m.role==="assistant" ? "model" : "user",
+    parts: [{text: m.content}]
+  }));
+  const lastMsg = msgs[msgs.length-1];
+  const body = {
+    system_instruction: { parts: [{text: system}] },
+    contents: [
+      ...history,
+      { role: "user", parts: [{text: lastMsg?.content ?? ""}] }
+    ],
+    generationConfig: { maxOutputTokens: 800, temperature: 0.9 }
+  };
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  }).then(r => r.json())
+    .then((d: Record<string, unknown>) => {
+      const candidates = d.candidates as {content:{parts:{text:string}[]}}[] | undefined;
+      return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    });
+}
+
 function callClaude(system: string, msgs: ClaudeMsg[]): Promise<string> {
+  const geminiKey = (window as Record<string,string>)["__GEMINI_KEY__"];
+  if (geminiKey) return callGemini(system, msgs);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  // 배포 환경에서 window.__ANTHROPIC_KEY__ 로 주입 (index.html에서 설정)
-  const key = (window as unknown as Record<string,string>)["__ANTHROPIC_KEY__"];
-  if (key) {
-    headers["x-api-key"] = key;
-    headers["anthropic-version"] = "2023-06-01";
-    headers["anthropic-dangerous-direct-browser-access"] = "true";
-  }
   return fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers,
     body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:800, system, messages:msgs})
-  }).then(r=>r.json())
-    .then((d:{content?:{text?:string}[]})=>(d.content||[]).map(c=>c.text||"").join(""));
+  }).then(r => r.json())
+    .then((d: Record<string, unknown>) => {
+      const content = d.content as {text?:string}[] | undefined;
+      return (content || []).map(c => c.text || "").join("");
+    });
 }
 function buildSystem(p: Persona): string {
   const role = p.gender==="여자친구"?"girlfriend":"boyfriend";

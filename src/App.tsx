@@ -38,7 +38,7 @@ const FONT_OPTIONS: {label:string; value:string}[] = [
   {label:"Nanum Gothic (단정함)", value:"'Nanum Gothic','Apple SD Gothic Neo',sans-serif"},
   {label:"Gamja Flower (손글씨 감성)", value:"'Gamja Flower','Apple SD Gothic Neo',sans-serif"},
 ];
-let globalFontFamily = FONT_OPTIONS[0].value;
+let globalFontFamily = FONT_OPTIONS[1].value;
 const FONT_FAMILY = "'Jua','Apple SD Gothic Neo',sans-serif";
 const ICON_URL = "https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.jpg";
 const STORAGE_KEY = "personas_v1";
@@ -381,7 +381,12 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
         {/* 채팅 삭제 */}
         <div style={{borderTop:"1px solid #f0f0f0",paddingTop:20}}>
           <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:12}}>대화 관리</div>
-          <button onClick={()=>{if(window.confirm("대화 내용을 모두 삭제할까요?")){onClearChat();onClose();}}}
+          <button onClick={()=>{
+            if(window.confirm("대화 내용을 모두 삭제할까요?")){
+              onClearChat();
+              onClose();
+            }
+          }}
             style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid #ffaaaa",background:"#fff5f5",cursor:"pointer",fontSize:14,color:"#e05555",fontFamily,fontWeight:600}}>
             대화 내용 전체 삭제
           </button>
@@ -398,7 +403,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   const [showEdit,setShowEdit]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const [fontSize,setFontSize]=useState(DEFAULT_FONT_SIZE);
-  const [fontFamily,setFontFamily]=useState(FONT_OPTIONS[0].value);
+  const [fontFamily,setFontFamily]=useState(FONT_OPTIONS[1].value);
   useEffect(()=>{ globalFontSize = fontSize; },[fontSize]);
   useEffect(()=>{ globalFontFamily = fontFamily; },[fontFamily]);
   const bottomRef=useRef<HTMLDivElement>(null);
@@ -455,7 +460,11 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily}}>
       {showEdit&&<EditModal profile={persona} onSave={p=>{updatePersona(persona.id,()=>p);setShowEdit(false);}} onClose={()=>setShowEdit(false)}/>}
-      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} onClearChat={()=>updatePersona(persona.id,p=>({...p,messages:[]}))} onClose={()=>setShowSettings(false)}/>}
+      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily}
+        onClearChat={()=>{
+          updatePersona(persona.id,p=>({...p,messages:[]}));
+        }}
+        onClose={()=>setShowSettings(false)}/>}
       {/* Header */}
       <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:20}}>
         <button onClick={onBack} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>

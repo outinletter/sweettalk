@@ -31,7 +31,6 @@ declare global {
 }
 
 // ── 상수 ──
-const FONT_URL = "https://fonts.googleapis.com/css2?family=Jua&family=Gamja+Flower&family=Nanum+Gothic:wght@400;700&family=Noto+Sans+KR:wght@400;600;700&display=swap";
 const FONT_OPTIONS: {label:string; value:string}[] = [
   {label:"Jua (둥글고 귀여운)", value:"'Jua','Apple SD Gothic Neo',sans-serif"},
   {label:"Noto Sans KR (깔끔 가독성)", value:"'Noto Sans KR','Apple SD Gothic Neo',sans-serif"},
@@ -39,8 +38,12 @@ const FONT_OPTIONS: {label:string; value:string}[] = [
   {label:"Gamja Flower (손글씨 감성)", value:"'Gamja Flower','Apple SD Gothic Neo',sans-serif"},
 ];
 const DEFAULT_FONT_FAMILY = FONT_OPTIONS[1].value; // Noto Sans KR 기본
-const ICON_URL = "https://raw.githubusercontent.com/outinletter/sweettalk/main/SweetTalk.jpg";
+const ICON_URL = "/SweetTalk.jpg"; // 로컬 번들 — 오프라인에서도 깨지지 않음
 const STORAGE_KEY = "personas_v1";
+const CONSENT_KEY = "consent_v1";
+const LAST_SCREEN_KEY = "last_screen_v1";
+const LAST_EXPORT_KEY = "last_export_v1";
+const DAILY_COUNT_KEY = "daily_msg_count_v1";
 const DEFAULT_FONT_SIZE = 17;
 const grad = "linear-gradient(135deg,#6a8fff,#a56bff)";
 const glass: CSSProperties = { background:"rgba(255,255,255,0.65)", backdropFilter:"blur(16px)" };
@@ -191,19 +194,9 @@ Korean text: ${text}`;
   return {translation:"(번역 실패)", alternatives:[]};
 }
 
-// ── Font Loader ──
+// ── Font Loader — 폰트/아이콘은 로컬 번들(main.tsx, index.html)로 이미 로드됨, 타이틀만 설정 ──
 function FontLoader() {
-  useEffect(()=>{
-    const font = document.createElement("link"); font.rel="stylesheet"; font.href=FONT_URL;
-    document.head.appendChild(font);
-    const tags: {rel:string;href:string;type?:string}[] = [
-      {rel:"apple-touch-icon",href:ICON_URL},
-      {rel:"icon",type:"image/jpeg",href:ICON_URL},
-    ];
-    const els = tags.map(attrs=>{ const el=document.createElement("link"); Object.assign(el,attrs); document.head.appendChild(el); return el; });
-    document.title="SweetTalk";
-    return ()=>{ document.head.removeChild(font); els.forEach(el=>document.head.removeChild(el)); };
-  },[]);
+  useEffect(()=>{ document.title="SweetTalk"; },[]);
   return null;
 }
 
@@ -243,9 +236,15 @@ function TransBlock({translation,alternatives,isMe,onRetry}:{translation:string;
   const failed = translation === "(번역 실패)";
   return (
     <div style={{marginTop:8,paddingLeft:10,borderLeft:`3px solid ${barColor}`}}>
-      <div style={{cursor:"pointer",fontWeight:600,userSelect:"none",marginBottom:4,fontSize:12,color:labelColor,fontFamily:ff}} onClick={()=>setOpen(o=>!o)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={open ? "영어 번역 접기" : "영어 번역 펼치기"}
+        onClick={()=>setOpen(o=>!o)}
+        style={{cursor:"pointer",fontWeight:600,userSelect:"none",marginBottom:4,fontSize:12,color:labelColor,fontFamily:ff,background:"none",border:"none",padding:0}}
+      >
         EN {open?"▾":"▸"}
-      </div>
+      </button>
       {open&&<>
         {failed ? (
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
@@ -260,6 +259,29 @@ function TransBlock({translation,alternatives,isMe,onRetry}:{translation:string;
           {alternatives.map((a,i)=><div key={i} style={{...enStyle,color:altColor,marginBottom:4}}>{i+1}. {a}</div>)}
         </>}
       </>}
+    </div>
+  );
+}
+
+// ── ConsentGate — 최초 1회 연령/고지 동의 화면 ──
+function ConsentGate({onAgree}:{onAgree:()=>void}) {
+  const [checked,setChecked]=useState(false);
+  const s: CSSProperties = {...BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",fontFamily:DEFAULT_FONT_FAMILY};
+  return (
+    <div style={s}>
+      <Blobs/>
+      <div style={{...glass,position:"relative",zIndex:1,borderRadius:20,padding:28,width:"100%",maxWidth:380}}>
+        <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:14}}>시작하기 전에 확인해주세요</div>
+        <div style={{fontSize:13,color:"#4a4a6a",lineHeight:1.8,marginBottom:20}}>
+          SweetTalk의 대화 상대는 AI가 생성한 가상의 캐릭터이며, 실제 인간관계를 대체하지 않습니다.<br/>
+          본 서비스는 만 14세 이상만 이용할 수 있습니다.
+        </div>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#333",marginBottom:20,cursor:"pointer"}}>
+          <input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>
+          위 내용을 확인했으며 만 14세 이상입니다
+        </label>
+        <button onClick={onAgree} disabled={!checked} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:checked?grad:"#ccc",color:"#fff",fontSize:15,cursor:checked?"pointer":"default",fontWeight:700}}>동의하고 시작하기</button>
+      </div>
     </div>
   );
 }
@@ -301,8 +323,9 @@ function Landing({onStart}:{onStart:()=>void}) {
 }
 
 // ── PersonaList ──
-function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete}:{personas:Persona[];activeId:string|null;onSelect:(id:string)=>void;onCreate:()=>void;onBack:()=>void;onDelete:(id:string)=>void}) {
+function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExport,onImport,showBackupReminder}:{personas:Persona[];activeId:string|null;onSelect:(id:string)=>void;onCreate:()=>void;onBack:()=>void;onDelete:(id:string)=>void;onExport:()=>void;onImport:(file:File)=>void;showBackupReminder:boolean}) {
   const [confirmId,setConfirmId]=useState<string|null>(null);
+  const fileInputRef=useRef<HTMLInputElement>(null);
   return (
     <div style={{...BG,maxWidth:500,margin:"0 auto",fontFamily:DEFAULT_FONT_FAMILY}}>
       <Blobs/>
@@ -310,11 +333,23 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete}:{pers
         <div style={{fontWeight:700,fontSize:18,color:"#1a1a3e"}}>연인 목록</div>
         <button onClick={onBack} style={{background:"none",border:"none",fontSize:13,color:"#7777bb",cursor:"pointer",fontWeight:600}}>처음으로</button>
       </div>
+      {showBackupReminder&&(
+        <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"8px 12px",position:"relative",zIndex:1}}>
+          대화는 이 기기에만 저장돼요. 앱 삭제·기기 변경 전에 아래 &apos;백업 내보내기&apos;로 저장해두세요.
+        </div>
+      )}
       <div style={{padding:16,display:"flex",flexDirection:"column",gap:12,position:"relative",zIndex:1}}>
         {personas.map(p=>(
           <div key={p.id} style={{...glass,borderRadius:14,padding:"16px 18px",display:"flex",flexDirection:"column",gap:10,border:`2px solid ${p.id===activeId?"#6a8fff":"rgba(255,255,255,0.5)"}`}}>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
-              <div onClick={()=>onSelect(p.id)} style={{display:"flex",alignItems:"center",gap:14,flex:1,cursor:"pointer"}}>
+              <div
+                onClick={()=>onSelect(p.id)}
+                role="button"
+                tabIndex={0}
+                aria-label={`${p.name}와의 대화 열기`}
+                onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onSelect(p.id);}}}
+                style={{display:"flex",alignItems:"center",gap:14,flex:1,cursor:"pointer"}}
+              >
                 <div style={{width:44,height:44,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:18,color:"#6a8fff",flexShrink:0}}>{p.name[0]}</div>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e"}}>{p.name} <span style={{fontWeight:400,fontSize:12,color:"#8888bb"}}>{p.age}세</span></div>
@@ -326,6 +361,7 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete}:{pers
               {confirmId!==p.id&&(
                 <button
                   onClick={()=>setConfirmId(p.id)}
+                  aria-label={`${p.name} 삭제`}
                   style={{background:"none",border:"none",fontSize:18,color:"#ccc",cursor:"pointer",padding:"4px 6px",flexShrink:0}}
                 >🗑️</button>
               )}
@@ -346,6 +382,11 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete}:{pers
             <div style={{fontSize:14,lineHeight:1.7}}>아직 만든 연인이 없어요<br/>위 버튼을 눌러 첫 연인을 만들어보세요</div>
           </div>
         )}
+        <div style={{display:"flex",gap:10,marginTop:8}}>
+          <button onClick={onExport} disabled={personas.length===0} style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.5)",cursor:personas.length===0?"default":"pointer",fontSize:13,color:personas.length===0?"#bbb":"#6a6aaa"}}>백업 내보내기</button>
+          <input ref={fileInputRef} type="file" accept="application/json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0]; if(f) onImport(f); e.target.value="";}}/>
+          <button onClick={()=>fileInputRef.current?.click()} style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:13,color:"#6a6aaa"}}>백업 가져오기</button>
+        </div>
       </div>
     </div>
   );
@@ -461,7 +502,7 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
       <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,padding:28,paddingBottom:36,fontFamily}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
+          <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
         </div>
         {/* 폰트 선택 */}
         <div style={{marginBottom:28}}>
@@ -479,12 +520,12 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
         <div style={{marginBottom:28}}>
           <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>글자 크기</div>
           <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <button onClick={()=>setFontSize((s:number)=>Math.max(12,s-1))} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+            <button onClick={()=>setFontSize((s:number)=>Math.max(12,s-1))} aria-label="글자 크기 줄이기" style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
             <div style={{flex:1,textAlign:"center"}}>
               <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6,fontFamily}}>안녕, 오늘 어때? Hi there!</div>
               <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{fontSize}px</div>
             </div>
-            <button onClick={()=>setFontSize((s:number)=>Math.min(24,s+1))} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
+            <button onClick={()=>setFontSize((s:number)=>Math.min(24,s+1))} aria-label="글자 크기 늘리기" style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
           </div>
           <input type="range" min={12} max={24} value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} style={{width:"100%",marginTop:12,accentColor:"#6a8fff"} as CSSProperties}/>
           <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily}}>기본값으로 초기화 ({DEFAULT_FONT_SIZE}px)</button>
@@ -535,13 +576,26 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   const [fontFamily,setFontFamily]=useState(DEFAULT_FONT_FAMILY);
   const bottomRef=useRef<HTMLDivElement>(null);
   const personaRef=useRef<Persona>(persona);
+  const [isOnline,setIsOnline]=useState(typeof navigator!=="undefined"?navigator.onLine:true);
+  const [justReconnected,setJustReconnected]=useState(false);
   useEffect(()=>{personaRef.current=persona;},[persona]);
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[persona.messages,aiLoading]);
   useEffect(()=>{ globalFontSize = fontSize; },[fontSize]);
   useEffect(()=>{ globalFontFamily = fontFamily; },[fontFamily]);
+  useEffect(()=>{
+    const goOnline=()=>{ setIsOnline(true); setJustReconnected(true); setTimeout(()=>setJustReconnected(false),3000); };
+    const goOffline=()=>setIsOnline(false);
+    window.addEventListener("online",goOnline);
+    window.addEventListener("offline",goOffline);
+    return ()=>{ window.removeEventListener("online",goOnline); window.removeEventListener("offline",goOffline); };
+  },[]);
 
   const genReply=useCallback((msgs: Message[])=>{
     const p=personaRef.current;
+    if(typeof navigator!=="undefined" && !navigator.onLine){
+      updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:"(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)",translation:"",alternatives:[]}]}));
+      return;
+    }
     setAiLoading(true);
     const history: ClaudeMsg[]=msgs.map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text}));
     callClaude(buildSystem(p),history)
@@ -578,8 +632,44 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   },[persona.id]);
 
   const sendingRef = useRef(false);
+  const requestTimestampsRef = useRef<number[]>([]);
+  const [rateLimitMsg,setRateLimitMsg] = useState("");
+  const RATE_LIMIT_MAX = 15;
+  const RATE_LIMIT_WINDOW_MS = 5*60*1000;
+  const DAILY_MSG_MAX = 200; // 비용 급증 방지용 기기당 일일 상한
+  const dailyCountRef = useRef<{date:string;count:number}>({date:"",count:0});
+  useEffect(()=>{
+    storageGet(DAILY_COUNT_KEY,false).then(r=>{
+      if(r) { try { dailyCountRef.current = JSON.parse(r.value); } catch {} }
+    });
+  },[]);
+  function checkRateLimit(): boolean {
+    const now = Date.now();
+    requestTimestampsRef.current = requestTimestampsRef.current.filter(t=>now-t<RATE_LIMIT_WINDOW_MS);
+    if(requestTimestampsRef.current.length>=RATE_LIMIT_MAX) return false;
+    requestTimestampsRef.current.push(now);
+    return true;
+  }
+  function checkDailyLimit(): boolean {
+    const today = new Date().toISOString().slice(0,10);
+    if(dailyCountRef.current.date !== today) dailyCountRef.current = {date:today,count:0};
+    if(dailyCountRef.current.count >= DAILY_MSG_MAX) return false;
+    dailyCountRef.current = {...dailyCountRef.current, count: dailyCountRef.current.count+1};
+    storageSet(DAILY_COUNT_KEY, JSON.stringify(dailyCountRef.current), false);
+    return true;
+  }
   function sendMessage() {
     if(!input.trim() || sendingRef.current) return;
+    if(!checkRateLimit()){
+      setRateLimitMsg("메시지를 너무 빠르게 보내고 있어요. 잠시 후 다시 시도해주세요.");
+      setTimeout(()=>setRateLimitMsg(""), 4000);
+      return;
+    }
+    if(!checkDailyLimit()){
+      setRateLimitMsg("오늘의 대화 한도에 도달했어요. 내일 다시 이용해주세요.");
+      setTimeout(()=>setRateLimitMsg(""), 4000);
+      return;
+    }
     sendingRef.current = true;
     const text=input.trim().slice(0,500); setInput("");
     setTimeout(()=>{ sendingRef.current = false; }, 300); // 더블클릭 방지용 짧은 잠금
@@ -599,6 +689,14 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
 
   function clearChat() {
     updatePersona(persona.id, p => ({...p, messages: []}));
+  }
+
+  const FAILURE_TEXTS = new Set(["(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)","(응답을 받지 못했어요. 다시 시도해주세요)","(연결에 실패했어요. 잠시 후 다시 시도해주세요)"]);
+  function retryReply(msgIndex: number) {
+    const p = personaRef.current;
+    const before = p.messages.slice(0, msgIndex);
+    updatePersona(persona.id, pr=>({...pr, messages: pr.messages.slice(0, msgIndex)}));
+    setTimeout(()=>genReply(before),0);
   }
 
   function retryTranslate(msgIndex: number) {
@@ -621,15 +719,25 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
       {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} onClearChat={clearChat} onClose={()=>setShowSettings(false)}/>}
       {/* Header — 고정 */}
       <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:20}}>
-        <button onClick={onBack} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
+        <button onClick={onBack} aria-label="뒤로가기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
         <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,color:"#6a8fff"}}>{persona.name[0]}</div>
         <div style={{flex:1}}>
           <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{persona.name}</div>
           <div style={{fontSize:11,color:"#999"}}>{persona.age}세 · {persona.personality}</div>
         </div>
         <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:12,color:"#555",marginRight:4}}>편집</button>
-        <button onClick={()=>setShowSettings(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16,color:"#888"}}>⚙️</button>
+        <button onClick={()=>setShowSettings(true)} aria-label="설정" style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16,color:"#888"}}>⚙️</button>
       </div>
+      {!isOnline&&(
+        <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>
+          오프라인 상태입니다. 네트워크 연결을 확인해주세요.
+        </div>
+      )}
+      {isOnline&&justReconnected&&(
+        <div style={{background:"#e6f9ee",color:"#1f8a4f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>
+          다시 연결되었어요. 메시지를 보낼 수 있어요.
+        </div>
+      )}
       {/* Messages */}
       <div style={{flex:1,overflowY:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:14}}>
         {persona.messages.map((m,i)=>{
@@ -639,6 +747,11 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
               {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name}</div>}
               <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
                 {m.text}
+                {!isMe&&FAILURE_TEXTS.has(m.text)&&(
+                  <div style={{marginTop:6}}>
+                    <button onClick={()=>retryReply(i)} style={{fontSize:12,padding:"4px 10px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa",color:"#555",cursor:"pointer"}}>다시 시도</button>
+                  </div>
+                )}
                 {m.translation&&<TransBlock translation={m.translation} alternatives={m.alternatives} isMe={isMe} onRetry={()=>retryTranslate(i)}/>}
               </div>
             </div>
@@ -670,10 +783,13 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}}
           placeholder={`${persona.name}에게 메시지 보내기...`} rows={1}
           style={{flex:1,border:"1.5px solid #ddd",borderRadius:12,padding:"10px 13px",fontSize:14,resize:"none",outline:"none",fontFamily,lineHeight:1.5,maxHeight:120,overflowY:"auto"}}/>
-        <button onClick={sendMessage} disabled={!input.trim()} style={{width:42,height:42,borderRadius:12,border:"none",background:input.trim()?"#4a9fff":"#ccc",cursor:input.trim()?"pointer":"default",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
+        <button onClick={sendMessage} disabled={!input.trim()} aria-label="전송" style={{width:42,height:42,borderRadius:12,border:"none",background:input.trim()?"#4a9fff":"#ccc",cursor:input.trim()?"pointer":"default",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
       </div>
       {input.length>400&&(
         <div style={{textAlign:"right",padding:"0 14px 6px",fontSize:11,color:input.length>=500?"#e05555":"#aaa",background:"#fff"}}>{input.length}/500</div>
+      )}
+      {rateLimitMsg&&(
+        <div style={{textAlign:"center",padding:"0 14px 8px",fontSize:12,color:"#e05555",background:"#fff"}}>{rateLimitMsg}</div>
       )}
     </div>
   );
@@ -681,21 +797,68 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
 
 // ── App ──
 export default function App() {
-  const [screen,setScreen]=useState<"loading"|"landing"|"list"|"setup"|"chat">("loading");
+  const [screen,setScreen]=useState<"loading"|"consent"|"landing"|"list"|"setup"|"chat">("loading");
   const [personas,setPersonas]=useState<Persona[]>([]);
   const [activeId,setActiveId]=useState<string|null>(null);
+  const [lastExportAt,setLastExportAt]=useState<number|null>(null);
+  const BACKUP_REMINDER_MS = 7*24*60*60*1000; // 7일
 
   useEffect(()=>{
-    loadPersonas().then(saved=>{
-      if(saved.length>0){ setPersonas(saved); setScreen("list"); }
-      else setScreen("landing");
+    storageGet(LAST_EXPORT_KEY,false).then(r=>{ if(r) setLastExportAt(Number(r.value)||null); });
+    loadPersonas().then(async saved=>{
+      const initial = saved.length>0 ? "list" : "landing";
+      if(saved.length>0) setPersonas(saved);
+      const consent = await storageGet(CONSENT_KEY, false);
+      let first: "consent"|"landing"|"list"|"chat" = consent ? initial : "consent";
+      let firstActiveId: string|null = null;
+      if(consent) {
+        try {
+          const lastRaw = await storageGet(LAST_SCREEN_KEY, false);
+          if(lastRaw) {
+            const last = JSON.parse(lastRaw.value) as {screen:string; activeId:string|null};
+            if(last.screen==="chat" && last.activeId && saved.some(p=>p.id===last.activeId)) {
+              first = "chat"; firstActiveId = last.activeId;
+            } else if(last.screen==="list" && saved.length>0) {
+              first = "list";
+            }
+          }
+        } catch {}
+      }
+      window.history.replaceState({screen: first, activeId: firstActiveId}, "");
+      setActiveId(firstActiveId);
+      setScreen(first);
     });
+  },[]);
+
+  function agreeConsent() {
+    storageSet(CONSENT_KEY, "1", false);
+    const initial = personas.length>0 ? "list" : "landing";
+    navigate(initial);
+  }
+
+  // Android/WebView 뒤로가기 버튼 → history.back() 대응
+  useEffect(()=>{
+    function onPop(e: PopStateEvent) {
+      const st = e.state as {screen:"loading"|"consent"|"landing"|"list"|"setup"|"chat"; activeId:string|null} | null;
+      if(st){ setScreen(st.screen); setActiveId(st.activeId); }
+    }
+    window.addEventListener("popstate", onPop);
+    return ()=>window.removeEventListener("popstate", onPop);
   },[]);
 
   useEffect(()=>{
     if(screen==="loading") return;
     savePersonas(personas);
   },[personas, screen]);
+
+  // 화면 전환 + 히스토리 스택 기록 (뒤로가기 대상이 됨)
+  function navigate(next:"loading"|"consent"|"landing"|"list"|"setup"|"chat", nextActiveId: string|null = activeId) {
+    window.history.pushState({screen: next, activeId: nextActiveId}, "");
+    setScreen(next); setActiveId(nextActiveId);
+    if(next==="list" || next==="chat") {
+      storageSet(LAST_SCREEN_KEY, JSON.stringify({screen: next, activeId: nextActiveId}), false);
+    }
+  }
 
   function updatePersona(id:string, fn:(p:Persona)=>Persona) {
     setPersonas(prev=>prev.map(p=>p.id===id?fn(p):p));
@@ -707,15 +870,45 @@ export default function App() {
   function handleSetupDone(profile:Omit<Persona,"id"|"messages">) {
     const id=Date.now().toString();
     setPersonas(prev=>[...prev,{id,...profile,messages:[]}]);
-    setActiveId(id); setScreen("chat");
+    navigate("chat", id);
+  }
+  function exportBackup() {
+    const blob = new Blob([JSON.stringify(personas, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ymd = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `sweettalk-backup-${ymd}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    const now = Date.now();
+    setLastExportAt(now);
+    storageSet(LAST_EXPORT_KEY, String(now), false);
+  }
+  function importBackup(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if(!Array.isArray(parsed)) throw new Error("invalid format");
+        setPersonas(parsed as Persona[]);
+      } catch {
+        window.alert("백업 파일을 읽을 수 없어요. 형식을 확인해주세요.");
+      }
+    };
+    reader.readAsText(file);
   }
   const active=personas.find(p=>p.id===activeId);
 
   const fl=<FontLoader/>;
   if(screen==="loading") return <>{fl}<div style={{minHeight:"100vh",background:"linear-gradient(145deg,#c9b8f0 0%,#a8c4f0 40%,#b8d4f8 70%,#d4e8ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DEFAULT_FONT_FAMILY}}><div style={{color:"#7777bb",fontSize:15}}>SweetTalk 불러오는 중...</div></div></>;
-  if(screen==="landing") return <>{fl}<Landing onStart={()=>setScreen("list")}/></>;
-  if(screen==="list") return <>{fl}<PersonaList personas={personas} activeId={activeId} onSelect={id=>{setActiveId(id);setScreen("chat");}} onCreate={()=>setScreen("setup")} onBack={()=>setScreen("landing")} onDelete={deletePersona}/></>;
-  if(screen==="setup") return <>{fl}<SetupWizard onDone={handleSetupDone} onCancel={()=>setScreen(personas.length>0?"list":"landing")}/></>;
-  if(screen==="chat"&&active) return <>{fl}<Chat persona={active} onBack={()=>setScreen("list")} updatePersona={updatePersona}/></>;
+  if(screen==="consent") return <>{fl}<ConsentGate onAgree={agreeConsent}/></>;
+  if(screen==="landing") return <>{fl}<Landing onStart={()=>navigate("list")}/></>;
+  if(screen==="list") {
+    const hasHistory = personas.some(p=>p.messages.length>0);
+    const showBackupReminder = hasHistory && (!lastExportAt || Date.now()-lastExportAt>BACKUP_REMINDER_MS);
+    return <>{fl}<PersonaList personas={personas} activeId={activeId} onSelect={id=>navigate("chat",id)} onCreate={()=>navigate("setup")} onBack={()=>navigate("landing")} onDelete={deletePersona} onExport={exportBackup} onImport={importBackup} showBackupReminder={showBackupReminder}/></>;
+  }
+  if(screen==="setup") return <>{fl}<SetupWizard onDone={handleSetupDone} onCancel={()=>navigate(personas.length>0?"list":"landing")}/></>;
+  if(screen==="chat"&&active) return <>{fl}<Chat persona={active} onBack={()=>navigate("list")} updatePersona={updatePersona}/></>;
   return null;
 }

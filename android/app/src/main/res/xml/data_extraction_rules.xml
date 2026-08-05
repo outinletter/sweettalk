@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+: 클라우드 백업과 기기 간 전송(D2D) 모두에서 WebView 로컬 저장소를 제외합니다.
+  이 앱은 Gemini API 키를 WebView localStorage에 저장하므로,
+  백업/기기 이전 과정에서 키가 다른 기기·계정으로 새는 것을 막기 위함입니다.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="app_webview/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="app_webview/" />
+    </device-transfer>
+</data-extraction-rules>

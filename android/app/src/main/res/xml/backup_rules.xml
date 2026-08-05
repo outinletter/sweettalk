@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 이하: 전체 백업(auto backup) 대상에서 WebView 로컬 저장소를 제외합니다.
+  이 앱은 Gemini API 키를 WebView localStorage에 저장하므로,
+  클라우드 백업으로 다른 기기/계정에 키가 새는 것을 막기 위함입니다.
+-->
+<full-backup-content>
+    <exclude domain="file" path="app_webview/" />
+</full-backup-content>

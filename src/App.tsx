@@ -43,7 +43,7 @@ const CONSENT_KEY = "consent_v1";
 const LAST_SCREEN_KEY = "last_screen_v1";
 const LAST_EXPORT_KEY = "last_export_v1";
 const DAILY_COUNT_KEY = "daily_msg_count_v1";
-const API_KEY_STORAGE_KEY = "gemini_api_key_v1";
+const API_KEY_STORAGE_KEY = "deepseek_api_key_v1";
 const DEFAULT_FONT_SIZE = 17;
 const grad = "linear-gradient(135deg,#6a8fff,#a56bff)";
 const glass: CSSProperties = { background:"rgba(255,255,255,0.65)", backdropFilter:"blur(16px)" };
@@ -108,59 +108,65 @@ async function cacheGet(k: string): Promise<TransResult|null> {
 }
 function cacheSet(k: string, v: TransResult): void { storageSet(k,JSON.stringify(v),true).catch(()=>{}); }
 
-// ── 사용자 Gemini API 키 관리 ──
-// 서버에 키를 두지 않고, 사용자가 직접 발급받은 키를 이 기기에만 저장해 본인 명의로 API를 호출합니다.
-let userGeminiKey = "";
-function setUserGeminiKey(key: string): void { userGeminiKey = key.trim(); }
-function hasUserGeminiKey(): boolean { return userGeminiKey.length>0; }
-async function loadUserGeminiKey(): Promise<string> {
+// ── 사용자 DeepSeek API 키 관리 ──
+// 서버에 키를 두지 않고, 사용자가 직접 발급받은 DeepSeek API 키로 직접 호출합니다.
+let userDeepseekKey = "";
+function setUserDeepseekKey(key: string): void { userDeepseekKey = key.trim(); }
+function hasUserDeepseekKey(): boolean { return userDeepseekKey.length>0; }
+async function loadUserDeepseekKey(): Promise<string> {
   try {
     const r = await storageGet(API_KEY_STORAGE_KEY, false);
     const k = r?.value ?? "";
-    userGeminiKey = k;
+    userDeepseekKey = k;
     return k;
   } catch { return ""; }
 }
-async function saveUserGeminiKey(key: string): Promise<void> {
-  setUserGeminiKey(key);
+async function saveUserDeepseekKey(key: string): Promise<void> {
+  setUserDeepseekKey(key);
   await storageSet(API_KEY_STORAGE_KEY, key.trim(), false);
 }
-async function clearUserGeminiKey(): Promise<void> {
-  setUserGeminiKey("");
+async function clearUserDeepseekKey(): Promise<void> {
+  setUserDeepseekKey("");
   await storageSet(API_KEY_STORAGE_KEY, "", false);
 }
 class ApiKeyMissingError extends Error {}
 
-// ── Gemini API — 사용자 본인의 키로 직접 호출 ──
-function callGemini(system: string, msgs: ClaudeMsg[]): Promise<string> {
-  if (!hasUserGeminiKey()) return Promise.reject(new ApiKeyMissingError("no api key"));
-  const key = userGeminiKey;
-  const history = msgs.slice(0,-1).map(m=>({
-    role: m.role==="assistant" ? "model" : "user",
-    parts: [{text: m.content}]
+// ── DeepSeek API — 사용자 본인의 키로 직접 호출 (OpenAI 호환 엔드포인트) ──
+function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
+  if (!hasUserDeepseekKey()) return Promise.reject(new ApiKeyMissingError("no api key"));
+  const key = userDeepseekKey;
+  const history = msgs.slice(0, -1).map(m => ({
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: m.content
   }));
-  const lastMsg = msgs[msgs.length-1];
+  const lastMsg = msgs[msgs.length - 1];
   const body = {
-    system_instruction: { parts: [{text: system}] },
-    contents: [
+    model: "deepseek-chat",
+    messages: [
+      { role: "system", content: system },
       ...history,
-      { role: "user", parts: [{text: lastMsg?.content ?? ""}] }
+      { role: "user", content: lastMsg?.content ?? "" }
     ],
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.9 }
+    max_tokens: 2048,
+    temperature: 0.9
   };
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${key}`;
+  const url = "https://api.deepseek.com/chat/completions";
   const doFetch = (retries: number): Promise<string> =>
-    fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) })
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+      body: JSON.stringify(body)
+    })
       .then(r => {
         if (r.status === 429 && retries > 0) {
-          return new Promise<string>(res => setTimeout(() => res(doFetch(retries-1)), 3000));
+          return new Promise<string>(res => setTimeout(() => res(doFetch(retries - 1)), 3000));
         }
-        if (r.status === 400 || r.status === 403) {
+        if (r.status === 400 || r.status === 401 || r.status === 403) {
           return Promise.reject(new ApiKeyMissingError("invalid api key"));
         }
         return r.json().then((d: Record<string, unknown>) => {
-          const candidates = d.candidates as {content:{parts:{text:string}[]}}[] | undefined;
-          return candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+          const choices = d.choices as { message: { content: string } }[] | undefined;
+          return choices?.[0]?.message?.content ?? "";
         });
       });
   return doFetch(2);
@@ -184,7 +190,7 @@ Output ONLY this exact JSON format with no extra text, no markdown, no code bloc
 Korean text: ${text}`;
 
   try {
-    const raw = await callGemini(
+    const raw = await callDeepseek(
       "You are a Korean-English translator. Output only valid JSON. No explanation, no markdown.",
       [{role:"user", content:prompt}]
     );
@@ -293,17 +299,16 @@ function ConsentGate({onAgree}:{onAgree:()=>void}) {
   );
 }
 
-// ── ApiKeySetup — 사용자 본인의 Gemini API 키 입력/저장 ──
+// ── ApiKeySetup — 사용자 본인의 DeepSeek API 키 입력/저장 ──
 const API_KEY_GUIDE_STEPS = [
-  "aistudio.google.com/apikey 접속 후 구글 계정으로 로그인",
-  "\"Create API key\"(API 키 만들기) 버튼 클릭",
-  "새 프로젝트를 만들거나 기존 프로젝트를 선택",
-  "생성된 키(AIza로 시작하는 문자열)를 복사",
+  "platform.deepseek.com 접속 후 DeepSeek 계정으로 로그인",
+  "\"API Keys\" 메뉴에서 \"Create API Key\" 버튼 클릭",
+  "생성된 키(sk-로 시작하는 문자열)를 복사",
   "아래 입력창에 붙여넣고 저장",
 ];
 
 function ApiKeySetup({allowSkip,onSaved,onSkip}:{allowSkip:boolean;onSaved:()=>void;onSkip:()=>void}) {
-  const [value,setValue]=useState(userGeminiKey);
+  const [value,setValue]=useState(userDeepseekKey);
   const [show,setShow]=useState(false);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
@@ -313,23 +318,23 @@ function ApiKeySetup({allowSkip,onSaved,onSkip}:{allowSkip:boolean;onSaved:()=>v
     const trimmed = value.trim();
     if(!trimmed){ setError("API 키를 입력해주세요."); return; }
     setSaving(true); setError("");
-    await saveUserGeminiKey(trimmed);
+    await saveUserDeepseekKey(trimmed);
     setSaving(false);
     onSaved();
   }
   async function handleClear() {
-    await clearUserGeminiKey();
+    await clearUserDeepseekKey();
     setValue("");
   }
   return (
     <div style={s}>
       <Blobs/>
       <div style={{...glass,position:"relative",zIndex:1,borderRadius:20,padding:28,width:"100%",maxWidth:400}}>
-        <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:10}}>Gemini API 키 설정</div>
+        <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:10}}>DeepSeek API 키 설정</div>
         <div style={{fontSize:13,color:"#4a4a6a",lineHeight:1.8,marginBottom:18}}>
-          SweetTalk API 버전은 서버 없이, 본인이 발급받은 Google Gemini API 키로 직접 대화를 생성합니다.<br/>
+          SweetTalk은 서버 없이, 본인이 발급받은 DeepSeek API 키로 직접 대화를 생성합니다.<br/>
           입력한 키는 이 기기에만 저장되며 외부로 전송되지 않습니다.<br/>
-          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{color:"#6a6aff",fontWeight:600}}>Google AI Studio에서 무료로 키 발급받기 ↗</a>
+          <a href="https://platform.deepseek.com/api-keys" target="_blank" rel="noopener noreferrer" style={{color:"#6a6aff",fontWeight:600}}>DeepSeek 플랫폼에서 무료로 키 발급받기 ↗</a>
         </div>
         <button
           type="button"
@@ -349,8 +354,8 @@ function ApiKeySetup({allowSkip,onSaved,onSkip}:{allowSkip:boolean;onSaved:()=>v
             type={show?"text":"password"}
             value={value}
             onChange={e=>{setValue(e.target.value); setError("");}}
-            placeholder="AIza..."
-            aria-label="Gemini API 키"
+            placeholder="sk-..."
+            aria-label="DeepSeek API 키"
             style={{width:"100%",padding:"12px 44px 12px 14px",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",fontSize:14,outline:"none",background:"rgba(255,255,255,0.85)",boxSizing:"border-box"}}
           />
           <button onClick={()=>setShow(s=>!s)} aria-label={show?"키 숨기기":"키 표시"} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:13,color:"#888",cursor:"pointer",padding:4}}>{show?"숨기기":"표시"}</button>
@@ -358,7 +363,7 @@ function ApiKeySetup({allowSkip,onSaved,onSkip}:{allowSkip:boolean;onSaved:()=>v
         {error&&<div style={{fontSize:12,color:"#e05555",marginBottom:10}}>{error}</div>}
         <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:grad,color:"#fff",fontSize:15,cursor:saving?"default":"pointer",fontWeight:700,marginTop:8}}>{saving?"저장 중...":"저장하고 시작하기"}</button>
         <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
-          {userGeminiKey&&<button onClick={handleClear} style={{background:"none",border:"none",color:"#e05555",fontSize:12,cursor:"pointer"}}>키 삭제</button>}
+          {userDeepseekKey&&<button onClick={handleClear} style={{background:"none",border:"none",color:"#e05555",fontSize:12,cursor:"pointer"}}>키 삭제</button>}
           {allowSkip&&<button onClick={onSkip} style={{background:"none",border:"none",color:"#9999cc",fontSize:12,cursor:"pointer",marginLeft:"auto"}}>나중에 설정하기</button>}
         </div>
       </div>
@@ -396,7 +401,7 @@ function Landing({onStart,onOpenApiKey}:{onStart:()=>void;onOpenApiKey:()=>void}
           ))}
         </div>
         <button onClick={onStart} style={{width:"100%",maxWidth:340,padding:"16px 0",borderRadius:16,border:"none",background:grad,color:"#fff",fontSize:17,cursor:"pointer"}}>시작하기</button>
-        <button onClick={onOpenApiKey} style={{marginTop:16,background:"none",border:"none",color:"#7777bb",fontSize:12.5,cursor:"pointer",fontWeight:600}}>{hasUserGeminiKey()?"Gemini API 키 변경":"Gemini API 키 설정"}</button>
+        <button onClick={onOpenApiKey} style={{marginTop:16,background:"none",border:"none",color:"#7777bb",fontSize:12.5,cursor:"pointer",fontWeight:600}}>{hasUserDeepseekKey()?"DeepSeek API 키 변경":"DeepSeek API 키 설정"}</button>
         <div style={{marginTop:20,fontSize:13,color:"#7777bb",textAlign:"center",lineHeight:1.8}}>설레는 대화로<br/>영어 실력이 자라요</div>
       </div>
     </div>
@@ -588,11 +593,11 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
           <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
         </div>
-        {/* Gemini API 키 */}
+        {/* DeepSeek API 키 */}
         <div style={{marginBottom:28}}>
-          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>Gemini API 키</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>DeepSeek API 키</div>
           <button onClick={onOpenApiKey} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:14,color:"#3a5fff",fontFamily,fontWeight:600}}>
-            {hasUserGeminiKey()?"API 키 변경":"API 키 설정"}
+            {hasUserDeepseekKey()?"API 키 변경":"API 키 설정"}
           </button>
         </div>
         {/* 폰트 선택 */}
@@ -687,13 +692,13 @@ function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBac
       updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:"(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)",translation:"",alternatives:[]}]}));
       return;
     }
-    if(!hasUserGeminiKey()){
-      updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:"(Gemini API 키가 설정되지 않았어요. 설정에서 키를 입력해주세요)",translation:"",alternatives:[]}]}));
+    if(!hasUserDeepseekKey()){
+      updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:"(DeepSeek API 키가 설정되지 않았어요. 설정에서 키를 입력해주세요)",translation:"",alternatives:[]}]}));
       return;
     }
     setAiLoading(true);
     const history: ClaudeMsg[]=msgs.map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text}));
-    callGemini(buildSystem(p),history)
+    callDeepseek(buildSystem(p),history)
       .then(raw=>{
         const reply=raw.trim();
         if(!reply){
@@ -715,9 +720,9 @@ function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBac
   },[updatePersona]);
 
   useEffect(()=>{
-    if(persona.messages.length===0&&!aiLoading&&hasUserGeminiKey()){
+    if(persona.messages.length===0&&!aiLoading&&hasUserDeepseekKey()){
       setAiLoading(true);
-      callGemini(buildSystem(persona),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
+      callDeepseek(buildSystem(persona),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
         .then(raw=>{
           const reply=raw.trim(); if(!reply){setAiLoading(false);return;}
           return translateWithAlts(reply).then(trans=>{
@@ -912,7 +917,7 @@ export default function App() {
       const initial = saved.length>0 ? "list" : "landing";
       if(saved.length>0) setPersonas(saved);
       const consent = await storageGet(CONSENT_KEY, false);
-      const savedKey = await loadUserGeminiKey();
+      const savedKey = await loadUserDeepseekKey();
       let first: "consent"|"apikey"|"landing"|"list"|"chat" = consent ? initial : "consent";
       if(consent && !savedKey) { first = "apikey"; setApiKeyReturn(initial==="list"?"list":"landing"); }
       let firstActiveId: string|null = null;
@@ -937,7 +942,7 @@ export default function App() {
 
   function agreeConsent() {
     storageSet(CONSENT_KEY, "1", false);
-    if(hasUserGeminiKey()) { navigate(personas.length>0 ? "list" : "landing"); return; }
+    if(hasUserDeepseekKey()) { navigate(personas.length>0 ? "list" : "landing"); return; }
     setApiKeyReturn(personas.length>0 ? "list" : "landing");
     navigate("apikey");
   }

@@ -107,8 +107,6 @@ async function cacheGet(k: string): Promise<TransResult|null> {
 }
 function cacheSet(k: string, v: TransResult): void { storageSet(k,JSON.stringify(v),true).catch(()=>{}); }
 
-class ApiKeyMissingError extends Error {}
-
 // ── DeepSeek API — Cloudflare Worker 프록시 호출 ──
 function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
   const history = msgs.slice(0, -1).map(m => ({
@@ -271,78 +269,6 @@ function ConsentGate({onAgree}:{onAgree:()=>void}) {
           위 내용을 확인했으며 만 14세 이상입니다
         </label>
         <button onClick={onAgree} disabled={!checked} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:checked?grad:"#ccc",color:"#fff",fontSize:15,cursor:checked?"pointer":"default",fontWeight:700}}>동의하고 시작하기</button>
-      </div>
-    </div>
-  );
-}
-
-// ── ApiKeySetup — 사용자 본인의 DeepSeek API 키 입력/저장 ──
-const API_KEY_GUIDE_STEPS = [
-  "platform.deepseek.com 접속 후 DeepSeek 계정으로 로그인",
-  "\"API Keys\" 메뉴에서 \"Create API Key\" 버튼 클릭",
-  "생성된 키(sk-로 시작하는 문자열)를 복사",
-  "아래 입력창에 붙여넣고 저장",
-];
-
-function ApiKeySetup({allowSkip,onSaved,onSkip}:{allowSkip:boolean;onSaved:()=>void;onSkip:()=>void}) {
-  const [value,setValue]=useState(userDeepseekKey);
-  const [show,setShow]=useState(false);
-  const [saving,setSaving]=useState(false);
-  const [error,setError]=useState("");
-  const [showGuide,setShowGuide]=useState(false);
-  const s: CSSProperties = {...BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",fontFamily:DEFAULT_FONT_FAMILY};
-  async function handleSave() {
-    const trimmed = value.trim();
-    if(!trimmed){ setError("API 키를 입력해주세요."); return; }
-    setSaving(true); setError("");
-    await saveUserDeepseekKey(trimmed);
-    setSaving(false);
-    onSaved();
-  }
-  async function handleClear() {
-    await clearUserDeepseekKey();
-    setValue("");
-  }
-  return (
-    <div style={s}>
-      <Blobs/>
-      <div style={{...glass,position:"relative",zIndex:1,borderRadius:20,padding:28,width:"100%",maxWidth:400}}>
-        <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:10}}>DeepSeek API 키 설정</div>
-        <div style={{fontSize:13,color:"#4a4a6a",lineHeight:1.8,marginBottom:18}}>
-          SweetTalk은 서버 없이, 본인이 발급받은 DeepSeek API 키로 직접 대화를 생성합니다.<br/>
-          입력한 키는 이 기기에만 저장되며 외부로 전송되지 않습니다.<br/>
-          <a href="https://platform.deepseek.com/api-keys" target="_blank" rel="noopener noreferrer" style={{color:"#6a6aff",fontWeight:600}}>DeepSeek 플랫폼에서 무료로 키 발급받기 ↗</a>
-        </div>
-        <button
-          type="button"
-          onClick={()=>setShowGuide(g=>!g)}
-          aria-expanded={showGuide}
-          style={{width:"100%",textAlign:"left",background:"rgba(255,255,255,0.5)",border:"1px solid rgba(106,143,255,0.25)",borderRadius:10,padding:"10px 12px",marginBottom:14,cursor:"pointer",fontSize:12.5,color:"#4a4a8a",fontWeight:600}}
-        >
-          {showGuide?"▾":"▸"} 발급 방법 자세히 보기
-        </button>
-        {showGuide&&(
-          <ol style={{margin:"-6px 0 14px",paddingLeft:20,fontSize:12.5,color:"#4a4a6a",lineHeight:1.9}}>
-            {API_KEY_GUIDE_STEPS.map((step,i)=><li key={i}>{step}</li>)}
-          </ol>
-        )}
-        <div style={{position:"relative",marginBottom:8}}>
-          <input
-            type={show?"text":"password"}
-            value={value}
-            onChange={e=>{setValue(e.target.value); setError("");}}
-            placeholder="sk-..."
-            aria-label="DeepSeek API 키"
-            style={{width:"100%",padding:"12px 44px 12px 14px",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",fontSize:14,outline:"none",background:"rgba(255,255,255,0.85)",boxSizing:"border-box"}}
-          />
-          <button onClick={()=>setShow(s=>!s)} aria-label={show?"키 숨기기":"키 표시"} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:13,color:"#888",cursor:"pointer",padding:4}}>{show?"숨기기":"표시"}</button>
-        </div>
-        {error&&<div style={{fontSize:12,color:"#e05555",marginBottom:10}}>{error}</div>}
-        <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:grad,color:"#fff",fontSize:15,cursor:saving?"default":"pointer",fontWeight:700,marginTop:8}}>{saving?"저장 중...":"저장하고 시작하기"}</button>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
-          {userDeepseekKey&&<button onClick={handleClear} style={{background:"none",border:"none",color:"#e05555",fontSize:12,cursor:"pointer"}}>키 삭제</button>}
-          {allowSkip&&<button onClick={onSkip} style={{background:"none",border:"none",color:"#9999cc",fontSize:12,cursor:"pointer",marginLeft:"auto"}}>나중에 설정하기</button>}
-        </div>
       </div>
     </div>
   );
@@ -676,9 +602,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
         });
       }).catch(err=>{
         setAiLoading(false);
-        const msg = err instanceof ApiKeyMissingError
-          ? "(API 키가 유효하지 않아요. 설정에서 키를 다시 확인해주세요)"
-          : "(연결에 실패했어요. 잠시 후 다시 시도해주세요)";
+        const msg = "(연결에 실패했어요. 잠시 후 다시 시도해주세요)";
         updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:msg,translation:"",alternatives:[]}]}));
       });
   },[updatePersona]);

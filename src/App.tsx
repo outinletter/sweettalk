@@ -122,9 +122,11 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
       { role: "user", content: lastMsg?.content ?? "" }
     ],
     max_tokens: 2048,
-    temperature: 0.9
+    temperature: 0.9,
+    stream: false
   };
   // Cloudflare Worker 프록시 엔드포인트
+  // Capacitor 환경에서는 절대 경로가 필요할 수 있으므로, 배포된 URL을 사용하는 것이 권장됩니다.
   const url = "/api/chat";
   const doFetch = (retries: number): Promise<string> =>
     fetch(url, {
@@ -132,12 +134,13 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     })
-      .then(r => {
+      .then(async r => {
         if (r.status === 429 && retries > 0) {
           return new Promise<string>(res => setTimeout(() => res(doFetch(retries - 1)), 3000));
         }
         if (!r.ok) {
-          return Promise.reject(new Error("API request failed"));
+          const errData = await r.json().catch(() => ({}));
+          throw new Error(errData.error || `API request failed with status ${r.status}`);
         }
         return r.json().then((d: any) => {
           const choices = d.choices as { message: { content: string } }[] | undefined;
@@ -602,7 +605,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
         });
       }).catch(err=>{
         setAiLoading(false);
-        const msg = "(연결에 실패했어요. 잠시 후 다시 시도해주세요)";
+        const msg = `(연결 실패: ${err.message})`;
         updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:msg,translation:"",alternatives:[]}]}));
       });
   },[updatePersona]);

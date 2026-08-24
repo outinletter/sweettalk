@@ -43,7 +43,6 @@ const CONSENT_KEY = "consent_v1";
 const LAST_SCREEN_KEY = "last_screen_v1";
 const LAST_EXPORT_KEY = "last_export_v1";
 const DAILY_COUNT_KEY = "daily_msg_count_v1";
-const API_KEY_STORAGE_KEY = "deepseek_api_key_v1";
 const DEFAULT_FONT_SIZE = 17;
 const grad = "linear-gradient(135deg,#6a8fff,#a56bff)";
 const glass: CSSProperties = { background:"rgba(255,255,255,0.65)", backdropFilter:"blur(16px)" };
@@ -108,33 +107,10 @@ async function cacheGet(k: string): Promise<TransResult|null> {
 }
 function cacheSet(k: string, v: TransResult): void { storageSet(k,JSON.stringify(v),true).catch(()=>{}); }
 
-// ── 사용자 DeepSeek API 키 관리 ──
-// 서버에 키를 두지 않고, 사용자가 직접 발급받은 DeepSeek API 키로 직접 호출합니다.
-let userDeepseekKey = "";
-function setUserDeepseekKey(key: string): void { userDeepseekKey = key.trim(); }
-function hasUserDeepseekKey(): boolean { return userDeepseekKey.length>0; }
-async function loadUserDeepseekKey(): Promise<string> {
-  try {
-    const r = await storageGet(API_KEY_STORAGE_KEY, false);
-    const k = r?.value ?? "";
-    userDeepseekKey = k;
-    return k;
-  } catch { return ""; }
-}
-async function saveUserDeepseekKey(key: string): Promise<void> {
-  setUserDeepseekKey(key);
-  await storageSet(API_KEY_STORAGE_KEY, key.trim(), false);
-}
-async function clearUserDeepseekKey(): Promise<void> {
-  setUserDeepseekKey("");
-  await storageSet(API_KEY_STORAGE_KEY, "", false);
-}
 class ApiKeyMissingError extends Error {}
 
-// ── DeepSeek API — 사용자 본인의 키로 직접 호출 (OpenAI 호환 엔드포인트) ──
+// ── DeepSeek API — Cloudflare Worker 프록시 호출 ──
 function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
-  if (!hasUserDeepseekKey()) return Promise.reject(new ApiKeyMissingError("no api key"));
-  const key = userDeepseekKey;
   const history = msgs.slice(0, -1).map(m => ({
     role: m.role === "assistant" ? "assistant" : "user",
     content: m.content
@@ -150,21 +126,22 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
     max_tokens: 2048,
     temperature: 0.9
   };
-  const url = "https://api.deepseek.com/chat/completions";
+  // Cloudflare Worker 프록시 엔드포인트
+  const url = "/api/chat";
   const doFetch = (retries: number): Promise<string> =>
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     })
       .then(r => {
         if (r.status === 429 && retries > 0) {
           return new Promise<string>(res => setTimeout(() => res(doFetch(retries - 1)), 3000));
         }
-        if (r.status === 400 || r.status === 401 || r.status === 403) {
-          return Promise.reject(new ApiKeyMissingError("invalid api key"));
+        if (!r.ok) {
+          return Promise.reject(new Error("API request failed"));
         }
-        return r.json().then((d: Record<string, unknown>) => {
+        return r.json().then((d: any) => {
           const choices = d.choices as { message: { content: string } }[] | undefined;
           return choices?.[0]?.message?.content ?? "";
         });
@@ -372,7 +349,7 @@ function ApiKeySetup({allowSkip,onSaved,onSkip}:{allowSkip:boolean;onSaved:()=>v
 }
 
 // ── Landing ──
-function Landing({onStart,onOpenApiKey}:{onStart:()=>void;onOpenApiKey:()=>void}) {
+function Landing({onStart}:{onStart:()=>void}) {
   const features = [
     {icon:"💬",title:"AI 연인 채팅",text:"이름, 성격, 말투, 관심사까지\n설정하여 나만의 연인과 대화"},
     {icon:"🔤",title:"실시간 영어 번역",text:"상대방의 메시지를 바로\n자연스러운 영어로 번역"},
@@ -401,7 +378,6 @@ function Landing({onStart,onOpenApiKey}:{onStart:()=>void;onOpenApiKey:()=>void}
           ))}
         </div>
         <button onClick={onStart} style={{width:"100%",maxWidth:340,padding:"16px 0",borderRadius:16,border:"none",background:grad,color:"#fff",fontSize:17,cursor:"pointer"}}>시작하기</button>
-        <button onClick={onOpenApiKey} style={{marginTop:16,background:"none",border:"none",color:"#7777bb",fontSize:12.5,cursor:"pointer",fontWeight:600}}>{hasUserDeepseekKey()?"DeepSeek API 키 변경":"DeepSeek API 키 설정"}</button>
         <div style={{marginTop:20,fontSize:13,color:"#7777bb",textAlign:"center",lineHeight:1.8}}>설레는 대화로<br/>영어 실력이 자라요</div>
       </div>
     </div>
@@ -409,7 +385,7 @@ function Landing({onStart,onOpenApiKey}:{onStart:()=>void;onOpenApiKey:()=>void}
 }
 
 // ── PersonaList ──
-function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExport,onImport,showBackupReminder,onOpenApiKey}:{personas:Persona[];activeId:string|null;onSelect:(id:string)=>void;onCreate:()=>void;onBack:()=>void;onDelete:(id:string)=>void;onExport:()=>void;onImport:(file:File)=>void;showBackupReminder:boolean;onOpenApiKey:()=>void}) {
+function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExport,onImport,showBackupReminder}:{personas:Persona[];activeId:string|null;onSelect:(id:string)=>void;onCreate:()=>void;onBack:()=>void;onDelete:(id:string)=>void;onExport:()=>void;onImport:(file:File)=>void;showBackupReminder:boolean}) {
   const [confirmId,setConfirmId]=useState<string|null>(null);
   const fileInputRef=useRef<HTMLInputElement>(null);
   return (
@@ -418,7 +394,6 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExpo
       <div style={{...glass,borderBottom:"1px solid rgba(255,255,255,0.4)",padding:"16px 18px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
         <div style={{fontWeight:700,fontSize:18,color:"#1a1a3e"}}>연인 목록</div>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={onOpenApiKey} aria-label="API 키 설정" style={{background:"none",border:"none",fontSize:16,color:"#888",cursor:"pointer"}}>⚙️</button>
           <button onClick={onBack} style={{background:"none",border:"none",fontSize:13,color:"#7777bb",cursor:"pointer",fontWeight:600}}>처음으로</button>
         </div>
       </div>
@@ -584,7 +559,7 @@ function EditModal({profile,onSave,onClose}:{profile:Persona;onSave:(p:Persona)=
 }
 
 // ── SettingsTab ──
-function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,onClose,onOpenApiKey}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;onClearChat:()=>void;onClose:()=>void;onOpenApiKey:()=>void}) {
+function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;onClearChat:()=>void;onClose:()=>void}) {
   const [confirmDelete,setConfirmDelete]=useState(false);
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
@@ -592,13 +567,6 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
           <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
-        </div>
-        {/* DeepSeek API 키 */}
-        <div style={{marginBottom:28}}>
-          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>DeepSeek API 키</div>
-          <button onClick={onOpenApiKey} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:14,color:"#3a5fff",fontFamily,fontWeight:600}}>
-            {hasUserDeepseekKey()?"API 키 변경":"API 키 설정"}
-          </button>
         </div>
         {/* 폰트 선택 */}
         <div style={{marginBottom:28}}>
@@ -663,7 +631,7 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
 }
 
 // ── Chat ──
-function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBack:()=>void;updatePersona:(id:string,fn:(p:Persona)=>Persona)=>void;onOpenApiKey:()=>void}) {
+function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;updatePersona:(id:string,fn:(p:Persona)=>Persona)=>void}) {
   const [aiLoading,setAiLoading]=useState(false);
   const [input,setInput]=useState("");
   const [showEdit,setShowEdit]=useState(false);
@@ -692,10 +660,6 @@ function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBac
       updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:"(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)",translation:"",alternatives:[]}]}));
       return;
     }
-    if(!hasUserDeepseekKey()){
-      updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:"(DeepSeek API 키가 설정되지 않았어요. 설정에서 키를 입력해주세요)",translation:"",alternatives:[]}]}));
-      return;
-    }
     setAiLoading(true);
     const history: ClaudeMsg[]=msgs.map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text}));
     callDeepseek(buildSystem(p),history)
@@ -720,7 +684,7 @@ function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBac
   },[updatePersona]);
 
   useEffect(()=>{
-    if(persona.messages.length===0&&!aiLoading&&hasUserDeepseekKey()){
+    if(persona.messages.length===0&&!aiLoading){
       setAiLoading(true);
       callDeepseek(buildSystem(persona),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
         .then(raw=>{
@@ -819,7 +783,7 @@ function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBac
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily}}>
       {showEdit&&<EditModal profile={persona} onSave={p=>{updatePersona(persona.id,()=>p);setShowEdit(false);}} onClose={()=>setShowEdit(false)}/>}
-      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} onClearChat={clearChat} onClose={()=>setShowSettings(false)} onOpenApiKey={onOpenApiKey}/>}
+      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} onClearChat={clearChat} onClose={()=>setShowSettings(false)}/>}
       {/* Header — 고정 */}
       <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:20}}>
         <button onClick={onBack} aria-label="뒤로가기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
@@ -900,15 +864,10 @@ function Chat({persona,onBack,updatePersona,onOpenApiKey}:{persona:Persona;onBac
 
 // ── App ──
 export default function App() {
-  const [screen,setScreen]=useState<"loading"|"consent"|"apikey"|"landing"|"list"|"setup"|"chat">("loading");
+  const [screen,setScreen]=useState<"loading"|"consent"|"landing"|"list"|"setup"|"chat">("loading");
   const [personas,setPersonas]=useState<Persona[]>([]);
   const [activeId,setActiveId]=useState<string|null>(null);
   const [lastExportAt,setLastExportAt]=useState<number|null>(null);
-  const [apiKeyReturn,setApiKeyReturn]=useState<"landing"|"list"|"chat">("landing");
-  function openApiKeySettings(returnTo:"landing"|"list"|"chat") {
-    setApiKeyReturn(returnTo);
-    navigate("apikey");
-  }
   const BACKUP_REMINDER_MS = 7*24*60*60*1000; // 7일
 
   useEffect(()=>{
@@ -917,11 +876,9 @@ export default function App() {
       const initial = saved.length>0 ? "list" : "landing";
       if(saved.length>0) setPersonas(saved);
       const consent = await storageGet(CONSENT_KEY, false);
-      const savedKey = await loadUserDeepseekKey();
-      let first: "consent"|"apikey"|"landing"|"list"|"chat" = consent ? initial : "consent";
-      if(consent && !savedKey) { first = "apikey"; setApiKeyReturn(initial==="list"?"list":"landing"); }
+      let first: "consent"|"landing"|"list"|"chat" = consent ? initial : "consent";
       let firstActiveId: string|null = null;
-      if(consent && savedKey) {
+      if(consent) {
         try {
           const lastRaw = await storageGet(LAST_SCREEN_KEY, false);
           if(lastRaw) {
@@ -942,19 +899,13 @@ export default function App() {
 
   function agreeConsent() {
     storageSet(CONSENT_KEY, "1", false);
-    if(hasUserDeepseekKey()) { navigate(personas.length>0 ? "list" : "landing"); return; }
-    setApiKeyReturn(personas.length>0 ? "list" : "landing");
-    navigate("apikey");
-  }
-  function afterApiKeySaved() {
-    const target = apiKeyReturn==="chat" && activeId ? "chat" : apiKeyReturn==="list" ? "list" : "landing";
-    navigate(target, activeId);
+    navigate(personas.length>0 ? "list" : "landing");
   }
 
   // Android/WebView 뒤로가기 버튼 → history.back() 대응
   useEffect(()=>{
     function onPop(e: PopStateEvent) {
-      const st = e.state as {screen:"loading"|"consent"|"apikey"|"landing"|"list"|"setup"|"chat"; activeId:string|null} | null;
+      const st = e.state as {screen:"loading"|"consent"|"landing"|"list"|"setup"|"chat"; activeId:string|null} | null;
       if(st){ setScreen(st.screen); setActiveId(st.activeId); }
     }
     window.addEventListener("popstate", onPop);
@@ -967,7 +918,7 @@ export default function App() {
   },[personas, screen]);
 
   // 화면 전환 + 히스토리 스택 기록 (뒤로가기 대상이 됨)
-  function navigate(next:"loading"|"consent"|"apikey"|"landing"|"list"|"setup"|"chat", nextActiveId: string|null = activeId) {
+  function navigate(next:"loading"|"consent"|"landing"|"list"|"setup"|"chat", nextActiveId: string|null = activeId) {
     window.history.pushState({screen: next, activeId: nextActiveId}, "");
     setScreen(next); setActiveId(nextActiveId);
     if(next==="list" || next==="chat") {
@@ -1017,14 +968,13 @@ export default function App() {
   const fl=<FontLoader/>;
   if(screen==="loading") return <>{fl}<div style={{minHeight:"100vh",background:"linear-gradient(145deg,#c9b8f0 0%,#a8c4f0 40%,#b8d4f8 70%,#d4e8ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DEFAULT_FONT_FAMILY}}><div style={{color:"#7777bb",fontSize:15}}>SweetTalk 불러오는 중...</div></div></>;
   if(screen==="consent") return <>{fl}<ConsentGate onAgree={agreeConsent}/></>;
-  if(screen==="apikey") return <>{fl}<ApiKeySetup allowSkip={apiKeyReturn!=="chat"} onSaved={afterApiKeySaved} onSkip={()=>navigate(apiKeyReturn==="list"?"list":"landing")}/></>;
-  if(screen==="landing") return <>{fl}<Landing onStart={()=>navigate("list")} onOpenApiKey={()=>openApiKeySettings("landing")}/></>;
+  if(screen==="landing") return <>{fl}<Landing onStart={()=>navigate("list")}/></>;
   if(screen==="list") {
     const hasHistory = personas.some(p=>p.messages.length>0);
     const showBackupReminder = hasHistory && (!lastExportAt || Date.now()-lastExportAt>BACKUP_REMINDER_MS);
-    return <>{fl}<PersonaList personas={personas} activeId={activeId} onSelect={id=>navigate("chat",id)} onCreate={()=>navigate("setup")} onBack={()=>navigate("landing")} onDelete={deletePersona} onExport={exportBackup} onImport={importBackup} showBackupReminder={showBackupReminder} onOpenApiKey={()=>openApiKeySettings("list")}/></>;
+    return <>{fl}<PersonaList personas={personas} activeId={activeId} onSelect={id=>navigate("chat",id)} onCreate={()=>navigate("setup")} onBack={()=>navigate("landing")} onDelete={deletePersona} onExport={exportBackup} onImport={importBackup} showBackupReminder={showBackupReminder}/></>;
   }
   if(screen==="setup") return <>{fl}<SetupWizard onDone={handleSetupDone} onCancel={()=>navigate(personas.length>0?"list":"landing")}/></>;
-  if(screen==="chat"&&active) return <>{fl}<Chat persona={active} onBack={()=>navigate("list")} updatePersona={updatePersona} onOpenApiKey={()=>openApiKeySettings("chat")}/></>;
+  if(screen==="chat"&&active) return <>{fl}<Chat persona={active} onBack={()=>navigate("list")} updatePersona={updatePersona}/></>;
   return null;
 }

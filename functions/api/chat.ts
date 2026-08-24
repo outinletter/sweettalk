@@ -8,11 +8,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const body = await request.json();
     // 환경 변수 이름이 다를 수 있으므로 여러 가능성 확인
-    const apiKey = env.DEEPSEEK_API_KEY || env.DEEPSEEK_KEY || env.API_KEY;
+    const apiKey = env.DEEPSEEK_API_KEY || env.DEEPSEEK_KEY || env.API_KEY || env.deepseek_api_key;
 
     if (!apiKey) {
+      const availableKeys = Object.keys(env).join(", ");
       return new Response(JSON.stringify({
-        error: "DeepSeek API key is not configured. Please set DEEPSEEK_API_KEY in Cloudflare Environment Variables."
+        error: "DeepSeek API key is not configured.",
+        debug: `Available env keys: [${availableKeys}]. Please set DEEPSEEK_API_KEY in Cloudflare Pages Settings -> Environment variables and REDEPLOY.`,
       }), {
         status: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }

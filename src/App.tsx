@@ -126,8 +126,8 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
     stream: false
   };
   // Cloudflare Worker 프록시 엔드포인트
-  // Capacitor 환경에서는 절대 경로가 필요할 수 있으므로, 배포된 URL을 사용하는 것이 권장됩니다.
-  const url = "/api/chat";
+  // Android/iOS WebView는 상대경로를 localhost로 해석하므로 반드시 절대경로 사용
+  const url = "https://sweettalk.pages.dev/api/chat";
   const doFetch = (retries: number): Promise<string> =>
     fetch(url, {
       method: "POST",

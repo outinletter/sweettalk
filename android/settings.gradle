@@ -1,3 +1,6 @@
+System.setProperty("android.user.home", "C:\\Users\\outin\\.android")
+System.setProperty("android.prefs.root", "C:\\Users\\outin\\.android")
+
 include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')

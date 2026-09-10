@@ -151,15 +151,31 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
   return doFetch(2);
 }
 
-function buildSystem(p: Persona, location?: string): string {
+// ── Weather API — wttr.in 사용 (텍스트 기반 날씨 정보) ──
+async function fetchWeather(location: string): Promise<string> {
+  if (!location.trim()) return "";
+  try {
+    // format=3: "Seoul: ☀️ +18°C" 형태의 짧은 텍스트 반환
+    const url = `https://wttr.in/${encodeURIComponent(location)}?format=3&lang=ko`;
+    const r = await fetch(url);
+    if (!r.ok) return "";
+    const text = await r.text();
+    return text.trim();
+  } catch {
+    return "";
+  }
+}
+
+function buildSystem(p: Persona, location?: string, weather?: string): string {
   const role = p.gender==="여자친구"?"girlfriend":"boyfriend";
   const now = new Date();
   const dateStr = now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
   const timeStr = now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
   let context = `Current time: ${dateStr} ${timeStr}.`;
   if (location) context += ` User's current location: ${location}.`;
+  if (weather) context += ` Current weather in that location: ${weather}.`;
 
-  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. ${context} Please incorporate the current time and location into your conversation to make it feel realistic (e.g., mention the time of day, season, or local context if appropriate). Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON.`;
+  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. ${context} Please incorporate the current time, location, and weather into your conversation to make it feel realistic (e.g., mention the weather, local landmarks, or time-appropriate activities). Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON.`;
 }
 
 async function translateWithAlts(text: string, forceRetry = false): Promise<TransResult> {
@@ -586,22 +602,31 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   const [fontSize,setFontSize]=useState(DEFAULT_FONT_SIZE);
   const [fontFamily,setFontFamily]=useState(DEFAULT_FONT_FAMILY);
   const [location,setLocation]=useState("");
+  const [weather,setWeather]=useState("");
   const bottomRef=useRef<HTMLDivElement>(null);
   const personaRef=useRef<Persona>(persona);
   const locationRef=useRef<string>(location);
+  const weatherRef=useRef<string>(weather);
   const [isOnline,setIsOnline]=useState(typeof navigator!=="undefined"?navigator.onLine:true);
   const [justReconnected,setJustReconnected]=useState(false);
   useEffect(()=>{personaRef.current=persona;},[persona]);
   useEffect(()=>{locationRef.current=location;},[location]);
+  useEffect(()=>{weatherRef.current=weather;},[weather]);
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[persona.messages,aiLoading]);
   useEffect(()=>{ globalFontSize = fontSize; },[fontSize]);
   useEffect(()=>{ globalFontFamily = fontFamily; },[fontFamily]);
   useEffect(()=>{
-    storageGet(LOCATION_KEY, false).then(r => { if(r) setLocation(r.value); });
+    storageGet(LOCATION_KEY, false).then(r => {
+      if(r) {
+        setLocation(r.value);
+        fetchWeather(r.value).then(setWeather);
+      }
+    });
   }, []);
   const saveLocation = (loc: string) => {
     setLocation(loc);
     storageSet(LOCATION_KEY, loc, false);
+    fetchWeather(loc).then(setWeather);
   };
   useEffect(()=>{
     const goOnline=()=>{ setIsOnline(true); setJustReconnected(true); setTimeout(()=>setJustReconnected(false),3000); };
@@ -619,7 +644,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
     }
     setAiLoading(true);
     const history: ClaudeMsg[]=msgs.map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text}));
-    callDeepseek(buildSystem(p, locationRef.current),history)
+    callDeepseek(buildSystem(p, locationRef.current, weatherRef.current),history)
       .then(raw=>{
         const reply=raw.trim();
         if(!reply){
@@ -641,14 +666,30 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   useEffect(()=>{
     if(persona.messages.length===0&&!aiLoading){
       setAiLoading(true);
-      callDeepseek(buildSystem(persona, locationRef.current),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
-        .then(raw=>{
-          const reply=raw.trim(); if(!reply){setAiLoading(false);return;}
-          return translateWithAlts(reply).then(trans=>{
-            updatePersona(persona.id,p=>({...p,messages:[{role:"ai",text:reply,translation:trans.translation,alternatives:trans.alternatives}]}));
-            setAiLoading(false);
-          });
-        }).catch(()=>setAiLoading(false));
+      // 첫 인사 시에도 위치와 날씨 반영 시도
+      const tryGreeting = async () => {
+        let loc = locationRef.current;
+        let w = weatherRef.current;
+
+        // 만약 아직 로딩 전이라면 한번 더 확인
+        if(!loc) {
+          const r = await storageGet(LOCATION_KEY, false);
+          if(r) {
+            loc = r.value;
+            w = await fetchWeather(loc);
+          }
+        }
+
+        callDeepseek(buildSystem(persona, loc, w),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
+          .then(raw=>{
+            const reply=raw.trim(); if(!reply){setAiLoading(false);return;}
+            return translateWithAlts(reply).then(trans=>{
+              updatePersona(persona.id,p=>({...p,messages:[{role:"ai",text:reply,translation:trans.translation,alternatives:trans.alternatives}]}));
+              setAiLoading(false);
+            });
+          }).catch(()=>setAiLoading(false));
+      };
+      tryGreeting();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[persona.id]);

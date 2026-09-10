@@ -1,0 +1,6 @@
+{
+  "appId": "com.sweettalk.api",
+  "appName": "SweetTalk",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

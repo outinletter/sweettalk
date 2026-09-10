@@ -43,6 +43,7 @@ const CONSENT_KEY = "consent_v1";
 const LAST_SCREEN_KEY = "last_screen_v1";
 const LAST_EXPORT_KEY = "last_export_v1";
 const DAILY_COUNT_KEY = "daily_msg_count_v1";
+const LOCATION_KEY = "user_location_v1";
 const DEFAULT_FONT_SIZE = 17;
 const grad = "linear-gradient(135deg,#6a8fff,#a56bff)";
 const glass: CSSProperties = { background:"rgba(255,255,255,0.65)", backdropFilter:"blur(16px)" };
@@ -150,9 +151,15 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
   return doFetch(2);
 }
 
-function buildSystem(p: Persona): string {
+function buildSystem(p: Persona, location?: string): string {
   const role = p.gender==="여자친구"?"girlfriend":"boyfriend";
-  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON.`;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
+  const timeStr = now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  let context = `Current time: ${dateStr} ${timeStr}.`;
+  if (location) context += ` User's current location: ${location}.`;
+
+  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. ${context} Please incorporate the current time and location into your conversation to make it feel realistic (e.g., mention the time of day, season, or local context if appropriate). Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON.`;
 }
 
 async function translateWithAlts(text: string, forceRetry = false): Promise<TransResult> {
@@ -320,7 +327,7 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExpo
   return (
     <div style={{...BG,maxWidth:500,margin:"0 auto",fontFamily:DEFAULT_FONT_FAMILY}}>
       <Blobs/>
-      <div style={{...glass,borderBottom:"1px solid rgba(255,255,255,0.4)",padding:"16px 18px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
+      <div style={{...glass,borderBottom:"1px solid rgba(255,255,255,0.4)",padding:"16px 18px 12px",paddingTop:"calc(16px + env(safe-area-inset-top, 0px))",display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
         <div style={{fontWeight:700,fontSize:18,color:"#1a1a3e"}}>연인 목록</div>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <button onClick={onBack} style={{background:"none",border:"none",fontSize:13,color:"#7777bb",cursor:"pointer",fontWeight:600}}>처음으로</button>
@@ -409,7 +416,7 @@ function SetupWizard({onDone,onCancel}:{onDone:(p:Omit<Persona,"id"|"messages">)
     else onDone({gender:nd.gender,name:nd.name,age:nd.age,personality:nd.personality,tone:nd.tone,interest:nd.interest});
   }
   return (
-    <div style={{...BG,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:DEFAULT_FONT_FAMILY}}>
+    <div style={{...BG,display:"flex",alignItems:"center",justifyContent:"center",padding:24,paddingTop:"calc(24px + env(safe-area-inset-top, 0px))",fontFamily:DEFAULT_FONT_FAMILY}}>
       <Blobs/>
       <div style={{...glass,width:"100%",maxWidth:420,borderRadius:20,padding:32,position:"relative",zIndex:1}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -488,7 +495,7 @@ function EditModal({profile,onSave,onClose}:{profile:Persona;onSave:(p:Persona)=
 }
 
 // ── SettingsTab ──
-function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;onClearChat:()=>void;onClose:()=>void}) {
+function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,setLocation,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;location:string;setLocation:(l:string)=>void;onClearChat:()=>void;onClose:()=>void}) {
   const [confirmDelete,setConfirmDelete]=useState(false);
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
@@ -496,6 +503,17 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,onClearChat,
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
           <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
+        </div>
+        {/* 사용자 위치 설정 */}
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>내 위치 설정 (현실적인 대화를 위해)</div>
+          <input
+            value={location}
+            onChange={e=>setLocation(e.target.value)}
+            placeholder="예: 서울 강남구, 제주도..."
+            style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",fontSize:15,outline:"none",background:"#fafaff",fontFamily,boxSizing:"border-box"}}
+          />
+          <div style={{fontSize:12,color:"#aaa",marginTop:6}}>위치를 입력하면 AI가 시간과 장소에 맞는 대화를 해줘요.</div>
         </div>
         {/* 폰트 선택 */}
         <div style={{marginBottom:28}}>
@@ -567,14 +585,24 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   const [showSettings,setShowSettings]=useState(false);
   const [fontSize,setFontSize]=useState(DEFAULT_FONT_SIZE);
   const [fontFamily,setFontFamily]=useState(DEFAULT_FONT_FAMILY);
+  const [location,setLocation]=useState("");
   const bottomRef=useRef<HTMLDivElement>(null);
   const personaRef=useRef<Persona>(persona);
+  const locationRef=useRef<string>(location);
   const [isOnline,setIsOnline]=useState(typeof navigator!=="undefined"?navigator.onLine:true);
   const [justReconnected,setJustReconnected]=useState(false);
   useEffect(()=>{personaRef.current=persona;},[persona]);
+  useEffect(()=>{locationRef.current=location;},[location]);
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[persona.messages,aiLoading]);
   useEffect(()=>{ globalFontSize = fontSize; },[fontSize]);
   useEffect(()=>{ globalFontFamily = fontFamily; },[fontFamily]);
+  useEffect(()=>{
+    storageGet(LOCATION_KEY, false).then(r => { if(r) setLocation(r.value); });
+  }, []);
+  const saveLocation = (loc: string) => {
+    setLocation(loc);
+    storageSet(LOCATION_KEY, loc, false);
+  };
   useEffect(()=>{
     const goOnline=()=>{ setIsOnline(true); setJustReconnected(true); setTimeout(()=>setJustReconnected(false),3000); };
     const goOffline=()=>setIsOnline(false);
@@ -591,7 +619,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
     }
     setAiLoading(true);
     const history: ClaudeMsg[]=msgs.map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text}));
-    callDeepseek(buildSystem(p),history)
+    callDeepseek(buildSystem(p, locationRef.current),history)
       .then(raw=>{
         const reply=raw.trim();
         if(!reply){
@@ -613,7 +641,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   useEffect(()=>{
     if(persona.messages.length===0&&!aiLoading){
       setAiLoading(true);
-      callDeepseek(buildSystem(persona),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
+      callDeepseek(buildSystem(persona, locationRef.current),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
         .then(raw=>{
           const reply=raw.trim(); if(!reply){setAiLoading(false);return;}
           return translateWithAlts(reply).then(trans=>{
@@ -710,17 +738,38 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily}}>
       {showEdit&&<EditModal profile={persona} onSave={p=>{updatePersona(persona.id,()=>p);setShowEdit(false);}} onClose={()=>setShowEdit(false)}/>}
-      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} onClearChat={clearChat} onClose={()=>setShowSettings(false)}/>}
+      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} location={location} setLocation={saveLocation} onClearChat={clearChat} onClose={()=>setShowSettings(false)}/>}
       {/* Header — 고정 */}
-      <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:20}}>
-        <button onClick={onBack} aria-label="뒤로가기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
-        <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,color:"#6a8fff"}}>{persona.name[0]}</div>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{persona.name}</div>
-          <div style={{fontSize:11,color:"#999"}}>{persona.age}세 · {persona.personality}</div>
+      <div style={{
+        background:"#fff",
+        borderBottom:"1px solid #eee",
+        padding:"10px 14px",
+        paddingTop: "calc(10px + env(safe-area-inset-top, 0px))",
+        display:"flex",
+        flexDirection: "column",
+        gap: 8,
+        flexShrink:0,
+        position:"sticky",
+        top:0,
+        zIndex:20
+      }}>
+        {/* Top: App Title & Icon */}
+        <div style={{display:"flex", alignItems:"center", justifyContent:"center", gap: 8}}>
+           <img src={ICON_URL} alt="SweetTalk" style={{width:20, height:20, borderRadius:5, objectFit:"cover"}}/>
+           <div style={{fontSize:16, fontWeight:800, color:"#1a1a2e"}}>SweetTalk</div>
         </div>
-        <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:12,color:"#555",marginRight:4}}>편집</button>
-        <button onClick={()=>setShowSettings(true)} aria-label="설정" style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:16,color:"#888"}}>⚙️</button>
+
+        {/* Bottom: Partner Info */}
+        <div style={{display:"flex", alignItems:"center", gap: 10}}>
+          <button onClick={onBack} aria-label="뒤로가기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
+          <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,color:"#6a8fff"}}>{persona.name[0]}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{persona.name}</div>
+            <div style={{fontSize:10,color:"#999"}}>{persona.age}세 · {persona.personality}</div>
+          </div>
+          <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:"#555"}}>편집</button>
+          <button onClick={()=>setShowSettings(true)} aria-label="설정" style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:14,color:"#888"}}>⚙️</button>
+        </div>
       </div>
       {!isOnline&&(
         <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>

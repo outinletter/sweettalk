@@ -36,6 +36,12 @@ const FONT_OPTIONS: {label:string; value:string}[] = [
   {label:"Nanum Gothic (단정함)", value:"'Nanum Gothic','Apple SD Gothic Neo',sans-serif"},
   {label:"Gamja Flower (손글씨 감성)", value:"'Gamja Flower','Apple SD Gothic Neo',sans-serif"},
 ];
+const FONT_LABELS: Record<AppLanguage, string[]> = {
+  ko:["Jua (둥글고 귀여운)","Noto Sans KR (깔끔 가독성)","Nanum Gothic (단정함)","Gamja Flower (손글씨 감성)"],
+  en:["Jua (Rounded and cute)","Noto Sans KR (Clean and readable)","Nanum Gothic (Neat)","Gamja Flower (Handwritten)"],
+  ja:["Jua（丸くてかわいい）","Noto Sans KR（読みやすい）","Nanum Gothic（端正）","Gamja Flower（手書き風）"],
+  "zh-CN":["Jua（圆润可爱）","Noto Sans KR（清晰易读）","Nanum Gothic（整洁）","Gamja Flower（手写风格）"]
+};
 const DEFAULT_FONT_FAMILY = FONT_OPTIONS[1].value; // Default Noto Sans KR
 const ICON_URL = "/SweetTalk.jpg"; // Local bundle — works offline
 const STORAGE_KEY = "personas_v1";
@@ -535,8 +541,8 @@ function EditModal({profile,onSave,onClose,language}:{profile:Persona;onSave:(p:
   const lbl: CSSProperties = {fontSize:12,fontWeight:600,color:"#7777aa",marginBottom:8,display:"block"};
   const validAge = /^(?:1[4-9]|[2-9][0-9]|1[0-1][0-9]|120)$/.test(age.trim());
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div style={{background:"rgba(240,244,255,0.97)",backdropFilter:"blur(20px)",borderRadius:20,width:"100%",maxWidth:420,maxHeight:"88vh",overflowY:"auto",padding:24,fontFamily:DEFAULT_FONT_FAMILY}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:"max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))"}}>
+      <div style={{background:"rgba(240,244,255,0.97)",backdropFilter:"blur(20px)",borderRadius:20,width:"100%",maxWidth:420,maxHeight:"calc(100dvh - 24px)",overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch",padding:"20px 18px max(20px, env(safe-area-inset-bottom))",fontFamily:DEFAULT_FONT_FAMILY}}>
         <div style={{fontWeight:700,fontSize:17,marginBottom:20,color:"#1a1a3e"}}>{UI_TEXT[language].edit}</div>
         {([["성별",["여자친구","남자친구"],"gender"],["성격",PERSONALITY_OPTS,"personality"],["말투",TONE_OPTS,"tone"],["관심사",INTEREST_OPTS,"interest"]] as [string,string[],keyof Persona][]).map(([label,opts,key])=>(
           <div key={key}>
@@ -561,8 +567,8 @@ function EditModal({profile,onSave,onClose,language}:{profile:Persona;onSave:(p:
 function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,setLocation,language,setLanguage,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;location:string;setLocation:(l:string)=>void;language:AppLanguage;setLanguage:(l:AppLanguage)=>void;onClearChat:()=>void;onClose:()=>void}) {
   const [confirmDelete,setConfirmDelete]=useState(false);
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,padding:28,paddingBottom:36,fontFamily}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"env(safe-area-inset-top)"}} onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,maxHeight:"calc(100dvh - env(safe-area-inset-top))",overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch",padding:"20px 18px max(24px, env(safe-area-inset-bottom))",fontFamily}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>{UI_TEXT[language].settings}</div>
           <button onClick={onClose} aria-label={language === "ko" ? "닫기" : language === "ja" ? "閉じる" : language === "zh-CN" ? "关闭" : "Close"} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
@@ -591,7 +597,7 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,set
             {FONT_OPTIONS.map(f=>(
               <button key={f.value} onClick={()=>setFontFamily(f.value)}
                 style={{padding:"12px 14px",borderRadius:10,border:`1.5px solid ${fontFamily===f.value?"#6a8fff":"rgba(106,143,255,0.25)"}`,background:fontFamily===f.value?"rgba(106,143,255,0.1)":"#fafaff",cursor:"pointer",textAlign:"left",fontFamily:f.value,fontSize:16,color:fontFamily===f.value?"#3a5fff":"#333"}}>
-                {f.label}
+                {FONT_LABELS[language][FONT_OPTIONS.indexOf(f)]}
               </button>
             ))}
           </div>
@@ -602,13 +608,13 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,set
           <div style={{display:"flex",alignItems:"center",gap:16}}>
             <button onClick={()=>setFontSize((s:number)=>Math.max(12,s-1))} aria-label={language === "ko" ? "글자 크기 줄이기" : language === "ja" ? "文字を小さくする" : language === "zh-CN" ? "减小文字" : "Decrease text size"} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
             <div style={{flex:1,textAlign:"center"}}>
-              <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6,fontFamily}}>안녕, 오늘 어때? Hi there!</div>
+              <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6,fontFamily}}>{language === "ko" ? "안녕, 오늘 어때?" : language === "ja" ? "こんにちは、元気？" : language === "zh-CN" ? "你好，今天怎么样？" : "Hi, how are you today?"}</div>
               <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{fontSize}px</div>
             </div>
             <button onClick={()=>setFontSize((s:number)=>Math.min(24,s+1))} aria-label={language === "ko" ? "글자 크기 늘리기" : language === "ja" ? "文字を大きくする" : language === "zh-CN" ? "增大文字" : "Increase text size"} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
           </div>
           <input type="range" min={12} max={24} value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} style={{width:"100%",marginTop:12,accentColor:"#6a8fff"} as CSSProperties}/>
-          <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily}}>기본값으로 초기화 ({DEFAULT_FONT_SIZE}px)</button>
+          <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily}}>{language === "ko" ? "기본값으로 초기화" : language === "ja" ? "初期値に戻す" : language === "zh-CN" ? "恢复默认值" : "Reset to default"} ({DEFAULT_FONT_SIZE}px)</button>
         </div>
         {/* Clear conversation — two-step confirmation without window.confirm */}
         <div style={{borderTop:"1px solid #f0f0f0",paddingTop:20}}>
@@ -617,16 +623,16 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,set
             <button
               onClick={()=>setConfirmDelete(true)}
               style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid #ffaaaa",background:"#fff5f5",cursor:"pointer",fontSize:14,color:"#e05555",fontFamily,fontWeight:600}}>
-              대화 내용 전체 삭제
+               {language === "ko" ? "대화 내용 전체 삭제" : language === "ja" ? "会話をすべて削除" : language === "zh-CN" ? "删除全部对话" : "Delete entire conversation"}
             </button>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{fontSize:13,color:"#e05555",textAlign:"center",marginBottom:2}}>정말 삭제할까요? 되돌릴 수 없어요.</div>
+              <div style={{fontSize:13,color:"#e05555",textAlign:"center",marginBottom:2}}>{language === "ko" ? "정말 삭제할까요? 되돌릴 수 없어요." : language === "ja" ? "本当に削除しますか？元に戻せません。" : language === "zh-CN" ? "确定要删除吗？此操作无法撤销。" : "Delete everything? This cannot be undone."}</div>
               <div style={{display:"flex",gap:8}}>
                 <button
                   onClick={()=>setConfirmDelete(false)}
                   style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid #ddd",background:"#f5f5f5",cursor:"pointer",fontSize:14,color:"#666",fontFamily}}>
-                  취소
+                  {UI_TEXT[language].cancel}
                 </button>
                 <button
                   onClick={()=>{
@@ -635,7 +641,7 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,set
                     onClose();
                   }}
                   style={{flex:1,padding:"12px 0",borderRadius:12,border:"none",background:"#e05555",cursor:"pointer",fontSize:14,color:"#fff",fontFamily,fontWeight:700}}>
-                  삭제하기
+                  {UI_TEXT[language].delete}
                 </button>
               </div>
             </div>

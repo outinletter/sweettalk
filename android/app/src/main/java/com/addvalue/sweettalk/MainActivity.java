@@ -1,4 +1,4 @@
-package com.sweettalk.api;
+package com.addvalue.sweettalk;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -1,4 +1,4 @@
-// Claude 아티팩트 환경의 window.storage를 localStorage로 대체합니다.
+// Replace window.storage from the Claude artifact environment with localStorage.
 
 const PREFIX = 'sweettalk:'
 
@@ -15,7 +15,7 @@ export async function storageSet(key: string, value: string): Promise<void> {
   try {
     localStorage.setItem(PREFIX + key, value)
   } catch {
-    // localStorage 용량 초과 시 오래된 번역 캐시 일부 삭제
+    // Remove part of the oldest translation cache when localStorage is full.
     clearOldCache()
     try { localStorage.setItem(PREFIX + key, value) } catch {}
   }
@@ -23,6 +23,6 @@ export async function storageSet(key: string, value: string): Promise<void> {
 
 function clearOldCache() {
   const keys = Object.keys(localStorage).filter(k => k.startsWith(PREFIX + 'tr:'))
-  // 번역 캐시 절반 삭제
+  // Remove half of the translation cache.
   keys.slice(0, Math.floor(keys.length / 2)).forEach(k => localStorage.removeItem(k))
 }

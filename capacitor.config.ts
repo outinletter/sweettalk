@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.sweettalk.api',
+  appId: 'com.addvalue.sweettalk',
   appName: 'SweetTalk',
   webDir: 'dist'
 };

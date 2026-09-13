@@ -1,6 +1,6 @@
 apply plugin: 'com.android.application'
 
-// 릴리스 서명 설정 (keystore.properties는 커밋하지 않음)
+// Release signing configuration (do not commit keystore.properties).
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 if (keystorePropertiesFile.exists()) {
@@ -8,10 +8,10 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.sweettalk.api"
+    namespace = "com.addvalue.sweettalk"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.sweettalk.api"
+        applicationId "com.addvalue.sweettalk"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 3

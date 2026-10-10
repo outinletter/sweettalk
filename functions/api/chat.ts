@@ -41,10 +41,12 @@ function getClientIp(request: Request): string {
   );
 }
 
-function corsHeaders(request?: Request): Record<string, string> {
-  const origin = request?.headers.get("Origin") || "";
-  const allowedOrigin = origin === "https://sweettalk.pages.dev" ? origin : "https://sweettalk.pages.dev";
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin") || "";
+  const allowedOrigins = ["https://sweettalk.pages.dev", "capacitor://localhost", "https://localhost", "http://localhost"];
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : "https://sweettalk.pages.dev";
   return {
+    "Vary": "Origin",
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -158,13 +160,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 };
 
-export const onRequestOptions: PagesFunction = async () => {
+export const onRequestOptions: PagesFunction = async ({ request }) => {
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": "https://sweettalk.pages.dev",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      ...corsHeaders(request),
       "Access-Control-Max-Age": "86400",
     },
   });

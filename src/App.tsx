@@ -320,7 +320,7 @@ function TransBlock({translation,alternatives,isMe,onRetry,language}:{translatio
         )}
         {!failed&&alternatives.length>0&&<>
            <div style={{fontSize:12,color:labelColor,marginBottom:3,fontFamily:ff}}>{UI_TEXT[language].alternative}:</div>
-          {alternatives.map((a,i)=><div key={i} style={{...enStyle,color:altColor,marginBottom:4}}>{i+1}. {a}</div>)}
+          {alternatives.slice(0,1).map((a,i)=><div key={i} style={{...enStyle,color:altColor,marginBottom:4}}>{i+1}. {a}</div>)}
         </>}
       </>}
     </div>

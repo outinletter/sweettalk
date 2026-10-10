@@ -40,9 +40,12 @@ function getClientIp(request: Request): string {
   );
 }
 
-function corsHeaders(): Record<string, string> {
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin") || "";
+  const allowedOrigins = ["https://sweettalk.pages.dev", "capacitor://localhost", "https://localhost", "http://localhost"];
   return {
-    "Access-Control-Allow-Origin": "*",
+    "Vary": "Origin",
+    "Access-Control-Allow-Origin": allowedOrigins.includes(origin) ? origin : "https://sweettalk.pages.dev",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "X-RateLimit-Limit": String(RATE_LIMIT_PER_DAY),
@@ -62,7 +65,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         debug: `Available env keys: [${availableKeys}]. Please set DEEPSEEK_API_KEY in Cloudflare Pages Settings -> Environment variables and REDEPLOY.`,
       }), {
         status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders() },
+        headers: { "Content-Type": "application/json", ...corsHeaders(request) },
       });
     }
 
@@ -78,7 +81,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         headers: {
           "Content-Type": "application/json",
           "Retry-After": String(RATE_LIMIT_WINDOW_SECONDS),
-          ...corsHeaders(),
+          ...corsHeaders(request),
         },
       });
     }
@@ -90,14 +93,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > 60) {
       return new Response(JSON.stringify({ error: "Invalid messages payload." }), {
         status: 400,
-        headers: { "Content-Type": "application/json", ...corsHeaders() },
+        headers: { "Content-Type": "application/json", ...corsHeaders(request) },
       });
     }
     for (const m of messages) {
       if (typeof m?.content !== "string" || m.content.length > 4000) {
         return new Response(JSON.stringify({ error: "Message too long." }), {
           status: 400,
-          headers: { "Content-Type": "application/json", ...corsHeaders() },
+          headers: { "Content-Type": "application/json", ...corsHeaders(request) },
         });
       }
     }
@@ -125,7 +128,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     } catch {
       return new Response(JSON.stringify({ error: "Invalid response from DeepSeek API", details: responseText }), {
         status: 502,
-        headers: { "Content-Type": "application/json", ...corsHeaders() },
+        headers: { "Content-Type": "application/json", ...corsHeaders(request) },
       });
     }
 
@@ -134,24 +137,22 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       headers: {
         "Content-Type": "application/json",
         "X-RateLimit-Remaining": String(rl.remaining),
-        ...corsHeaders(),
+        ...corsHeaders(request),
       },
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
+      headers: { "Content-Type": "application/json", ...corsHeaders(request) },
     });
   }
 };
 
-export const onRequestOptions: PagesFunction = async () => {
+export const onRequestOptions: PagesFunction = async ({ request }) => {
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      ...corsHeaders(request),
       "Access-Control-Max-Age": "86400",
     },
   });

@@ -1,3 +1,4 @@
+import { checkInEnabled, setCheckInEnabled, recordCheckInActivity, cancelCheckIn, takeDueCheckIn, listenForCheckIn } from "./checkIn";
 import { useState, useRef, useEffect, useCallback, CSSProperties } from "react";
 
 // ── 타입 정의 ──
@@ -39,7 +40,9 @@ const FONT_OPTIONS: {label:string; value:string}[] = [
 const DEFAULT_FONT_FAMILY = FONT_OPTIONS[1].value; // Noto Sans KR 기본
 const ICON_URL = "/SweetTalk.jpg"; // 로컬 번들 — 오프라인에서도 깨지지 않음
 const STORAGE_KEY = "personas_v1";
-const CONSENT_KEY = "consent_v1";
+const CONSENT_KEY = "consent_v2";
+const PRIVACY_URL = "https://outinletter.github.io/privacy-policy/";
+const SUPPORT_EMAIL = "outintube@gmail.com";
 const LAST_SCREEN_KEY = "last_screen_v1";
 const LAST_EXPORT_KEY = "last_export_v1";
 const DAILY_COUNT_KEY = "daily_msg_count_v1";
@@ -88,16 +91,34 @@ async function storageSet(key: string, value: string, shared: boolean): Promise<
   try { localStorage.setItem(LS_PREFIX + key, value); } catch {}
 }
 
+function isPersonaList(value: unknown): value is Persona[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  return value.every(p => {
+    if (!p || typeof p.id !== "string" || !p.id || ids.has(p.id)) return false;
+    ids.add(p.id);
+    return ["gender","name","age","personality","tone","interest"].every(k => typeof p[k] === "string")
+      && /^[0-9]{1,2}$/.test(p.age) && Number(p.age) >= 18
+      && Array.isArray(p.messages) && p.messages.every((m: any) => m
+        && ["user","ai"].includes(m.role) && typeof m.text === "string"
+        && typeof m.translation === "string" && Array.isArray(m.alternatives)
+        && m.alternatives.every((a: unknown) => typeof a === "string"));
+  });
+}
+
 async function loadPersonas(): Promise<Persona[]> {
   try {
     const r = await storageGet(STORAGE_KEY, false);
-    return r ? JSON.parse(r.value) : [];
+    const parsed: unknown = r ? JSON.parse(r.value) : [];
+    if (Array.isArray(parsed)) parsed.forEach(p => {
+      if (p && typeof p.age === "string" && /^[0-9]{1,2}$/.test(p.age) && Number(p.age) < 18) p.age = "18";
+    });
+    return isPersonaList(parsed) ? parsed : [];
   } catch { return []; }
 }
 async function savePersonas(list: Persona[]): Promise<void> {
   try {
-    const trimmed = list.map(p=>({...p, messages: p.messages.slice(-40)}));
-    await storageSet(STORAGE_KEY, JSON.stringify(trimmed), false);
+    await storageSet(STORAGE_KEY, JSON.stringify(list), false);
   } catch (e) {
     console.warn("SweetTalk: 대화 저장 실패", e);
   }
@@ -110,17 +131,18 @@ function cacheSet(k: string, v: TransResult): void { storageSet(k,JSON.stringify
 
 // ── DeepSeek API — Cloudflare Worker 프록시 호출 ──
 function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
-  const history = msgs.slice(0, -1).map(m => ({
+  const recent = msgs.slice(-59);
+  const history = recent.slice(0, -1).map(m => ({
     role: m.role === "assistant" ? "assistant" : "user",
-    content: m.content
+    content: m.content.slice(0, 4000)
   }));
-  const lastMsg = msgs[msgs.length - 1];
+  const lastMsg = recent[recent.length - 1];
   const body = {
     model: "deepseek-chat",
     messages: [
       { role: "system", content: system },
       ...history,
-      { role: "user", content: lastMsg?.content ?? "" }
+      { role: "user", content: (lastMsg?.content ?? "").slice(0, 4000) }
     ],
     max_tokens: 2048,
     temperature: 0.9,
@@ -129,53 +151,60 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
   // Cloudflare Worker 프록시 엔드포인트
   // Android/iOS WebView는 상대경로를 localhost로 해석하므로 반드시 절대경로 사용
   const url = "https://sweettalk.pages.dev/api/chat";
-  const doFetch = (retries: number): Promise<string> =>
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    })
-      .then(async r => {
-        if (r.status === 429 && retries > 0) {
-          return new Promise<string>(res => setTimeout(() => res(doFetch(retries - 1)), 3000));
-        }
-        if (!r.ok) {
-          const errData = await r.json().catch(() => ({}));
-          throw new Error(errData.error || `API request failed with status ${r.status}`);
-        }
-        return r.json().then((d: any) => {
-          const choices = d.choices as { message: { content: string } }[] | undefined;
-          return choices?.[0]?.message?.content ?? "";
-        });
-      });
-  return doFetch(2);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  }).then(async r => {
+    if (!r.ok) {
+      const errorBody = await r.json().catch(() => null);
+      const message = r.status === 400 && errorBody?.error === "Message too long." ? "대화 내용이 서버 길이 제한을 초과했어요" : r.status === 400 && errorBody?.error === "Invalid messages payload." ? "대화 목록 형식이 올바르지 않아요" : r.status === 429 ? "오늘의 사용 한도에 도달했어요" : r.status === 400 ? "대화 요청 형식에 문제가 있어요" : r.status === 401 || r.status === 403 ? "서버 API 인증에 실패했어요" : "서버가 답변을 처리하지 못했어요";
+      throw new Error(`API_ERROR:${message} (HTTP ${r.status})`);
+    }
+    const data = await r.json();
+    return typeof data.choices?.[0]?.message?.content === "string" ? data.choices[0].message.content : "";
+  }).finally(() => clearTimeout(timer));
 }
 
-// ── Weather API — wttr.in 사용 (텍스트 기반 날씨 정보) ──
+// ── Weather API — wttr.in의 구조화된 현재 관측 자료 ──
 async function fetchWeather(location: string): Promise<string> {
   if (!location.trim()) return "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    // format=3: "Seoul: ☀️ +18°C" 형태의 짧은 텍스트 반환
-    const url = `https://wttr.in/${encodeURIComponent(location)}?format=3&lang=ko`;
-    const r = await fetch(url);
+    const url = `https://wttr.in/${encodeURIComponent(location.trim().slice(0,200))}?format=j1&lang=ko`;
+    const r = await fetch(url, { signal: controller.signal, cache: "no-store" });
     if (!r.ok) return "";
-    const text = await r.text();
-    return text.trim();
+    const data = await r.json();
+    const current = data.current_condition?.[0];
+    const area = data.nearest_area?.[0];
+    if (!current || !area || !/^-?\d+(\.\d+)?$/.test(String(current.temp_C))) return "";
+    const date = data.weather?.[0]?.date;
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Math.abs(Date.now() - Date.parse(`${date}T12:00:00Z`)) > 36*60*60*1000) return "";
+    const place = [area.areaName?.[0]?.value, area.region?.[0]?.value, area.country?.[0]?.value].filter(Boolean).join(", ").slice(0,120);
+    const description = String(current.lang_ko?.[0]?.value || current.weatherDesc?.[0]?.value || "").trim().slice(0,80);
+    return `Source: wttr.in. Resolved area: ${place}. ${description}; temperature ${current.temp_C}°C; feels like ${current.FeelsLikeC}°C; precipitation ${current.precipMM}mm; wind ${current.windspeedKmph}km/h. Provider observation: ${String(current.localObsDateTime || current.observation_time || "unknown").slice(0,40)}; fetched ${new Date().toISOString()}.`.slice(0,600);
   } catch {
     return "";
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 function buildSystem(p: Persona, location?: string, weather?: string): string {
+  p = {...p, name:p.name.slice(0,200), personality:p.personality.slice(0,200), tone:p.tone.slice(0,200), interest:p.interest.slice(0,200)};
   const role = p.gender==="여자친구"?"girlfriend":"boyfriend";
   const now = new Date();
   const dateStr = now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
   const timeStr = now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-  let context = `Current time: ${dateStr} ${timeStr}.`;
-  if (location) context += ` User's current location: ${location}.`;
-  if (weather) context += ` Current weather in that location: ${weather}.`;
+  let context = `User device local time: ${dateStr} ${timeStr} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`;
+  if (location) context += ` User's current location: ${location.slice(0,200)}.`;
+  context += weather ? ` Latest retrieved weather report: ${weather.slice(0,600)}.` : " Weather lookup unavailable. Do not invent current weather, temperature, or precipitation.";
 
-  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. ${context} Please incorporate the current time, location, and weather into your conversation to make it feel realistic (e.g., mention the weather, local landmarks, or time-appropriate activities). Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON.`;
+  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. ${context} Respond to the user's actual message and recent conversation first. Use time and verified weather only when relevant; do not repeat weather small talk each turn. Treat the report as provider observations, not guaranteed live conditions. If the resolved area differs from the requested location or the user corrects the weather, acknowledge uncertainty. Do not invent local events, landmarks, forecasts, or shared real-world experiences. Ask a natural follow-up when helpful. Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON. All characters are adults aged 18 or older. Never produce sexual or exploitative content involving minors, explicit sexual content, abuse, or instructions for self-harm or violence. For crisis or self-harm requests, respond supportively and encourage contacting trusted people or local emergency services. Do not claim to be human or encourage isolation from real relationships.`;
 }
 
 async function translateWithAlts(text: string, forceRetry = false): Promise<TransResult> {
@@ -185,9 +214,9 @@ async function translateWithAlts(text: string, forceRetry = false): Promise<Tran
     if(cached && cached.translation !== "(번역 실패)") return cached;
   }
 
-  const prompt = `Translate the Korean text to English. Give 2 alternative phrasings.
+  const prompt = `Translate the Korean text to English. Give exactly 1 alternative phrasing.
 Output ONLY this exact JSON format with no extra text, no markdown, no code blocks:
-{"translation":"...","alternatives":["...","..."]}
+{"translation":"...","alternatives":["..."]}
 Korean text: ${text}`;
 
   try {
@@ -198,8 +227,8 @@ Korean text: ${text}`;
     const match = raw.match(/\{[\s\S]*\}/);
     if(match) {
       const parsed: TransResult = JSON.parse(match[0]);
-      if(parsed.translation) {
-        const result = {translation: parsed.translation, alternatives: parsed.alternatives || []};
+      if(typeof parsed.translation === "string" && Array.isArray(parsed.alternatives) && parsed.alternatives.every((a: unknown) => typeof a === "string")) {
+        const result = {translation: parsed.translation, alternatives: (parsed.alternatives || []).slice(0, 1)};
         cacheSet(key, result);
         return result;
       }
@@ -270,7 +299,7 @@ function TransBlock({translation,alternatives,isMe,onRetry}:{translation:string;
         )}
         {!failed&&alternatives.length>0&&<>
           <div style={{fontSize:12,color:labelColor,marginBottom:3,fontFamily:ff}}>다른 표현:</div>
-          {alternatives.map((a,i)=><div key={i} style={{...enStyle,color:altColor,marginBottom:4}}>{i+1}. {a}</div>)}
+          {alternatives.slice(0,1).map((a,i)=><div key={i} style={{...enStyle,color:altColor,fontStyle:"italic",marginBottom:4}}>{i+1}. {a}</div>)}
         </>}
       </>}
     </div>
@@ -280,6 +309,7 @@ function TransBlock({translation,alternatives,isMe,onRetry}:{translation:string;
 // ── ConsentGate — 최초 1회 연령/고지 동의 화면 ──
 function ConsentGate({onAgree}:{onAgree:()=>void}) {
   const [checked,setChecked]=useState(false);
+  const [dataConsent,setDataConsent]=useState(false);
   const s: CSSProperties = {...BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",fontFamily:DEFAULT_FONT_FAMILY};
   return (
     <div style={s}>
@@ -288,13 +318,22 @@ function ConsentGate({onAgree}:{onAgree:()=>void}) {
         <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:14}}>시작하기 전에 확인해주세요</div>
         <div style={{fontSize:13,color:"#4a4a6a",lineHeight:1.8,marginBottom:20}}>
           SweetTalk의 대화 상대는 AI가 생성한 가상의 캐릭터이며, 실제 인간관계를 대체하지 않습니다.<br/>
-          본 서비스는 만 14세 이상만 이용할 수 있습니다.
+          본 서비스는 만 14세 이상만 이용할 수 있습니다.<br/>
+          AI 응답과 번역을 위해 대화 내용과 캐릭터 설정이 Cloudflare를 통해 DeepSeek에 전송됩니다. 입력한 위치는 날씨 조회를 위해 wttr.in에, 대화 맥락을 위해 DeepSeek에 전송됩니다. 민감한 개인정보는 입력하지 마세요.
+        </div>
+        <div style={{fontSize:13,marginBottom:16}}>
+          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">개인정보 처리방침</a>
+          {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>문의하기</a>
         </div>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#333",marginBottom:20,cursor:"pointer"}}>
           <input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>
           위 내용을 확인했으며 만 14세 이상입니다
         </label>
-        <button onClick={onAgree} disabled={!checked} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:checked?grad:"#ccc",color:"#fff",fontSize:15,cursor:checked?"pointer":"default",fontWeight:700}}>동의하고 시작하기</button>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#333",marginBottom:20,cursor:"pointer"}}>
+          <input type="checkbox" checked={dataConsent} onChange={e=>setDataConsent(e.target.checked)}/>
+          위 데이터의 외부 서비스 전송에 동의합니다
+        </label>
+        <button onClick={onAgree} disabled={!checked || !dataConsent} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:checked && dataConsent?grad:"#ccc",color:"#fff",fontSize:15,cursor:checked && dataConsent?"pointer":"default",fontWeight:700}}>동의하고 시작하기</button>
       </div>
     </div>
   );
@@ -426,7 +465,7 @@ function SetupWizard({onDone,onCancel}:{onDone:(p:Omit<Persona,"id"|"messages">)
     const key=STEP_KEYS[step];
     const val=opts?draft[key]:txt.trim();
     if(!val) return;
-    if(key==="age" && (!/^[0-9]{1,2}$/.test(val) || val==="0")) return;
+    if(key==="age" && (!/^[0-9]{1,2}$/.test(val) || Number(val)<18)) { window.alert("캐릭터 나이는 18~99세로 입력해주세요."); return; }
     const nd={...draft,[key]:val}; setDraft(nd); setTxt("");
     if(step<5) setStep(s=>s+1);
     else onDone({gender:nd.gender,name:nd.name,age:nd.age,personality:nd.personality,tone:nd.tone,interest:nd.interest});
@@ -503,7 +542,7 @@ function EditModal({profile,onSave,onClose}:{profile:Persona;onSave:(p:Persona)=
         <span style={lbl}>나이</span><input value={age} onChange={e=>setAge(e.target.value)} style={inp}/>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onClose} style={{flex:1,padding:"11px 0",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:14,color:"#666"}}>취소</button>
-          <button onClick={()=>onSave({...p,name:name.trim()||p.name,age:age.trim()||p.age})} style={{flex:1,padding:"11px 0",borderRadius:10,border:"none",background:grad,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:700}}>저장</button>
+          <button onClick={()=>{ if(!/^[0-9]{1,2}$/.test(age.trim()) || Number(age)<18) { window.alert("캐릭터 나이는 18~99세로 입력해주세요."); return; } onSave({...p,name:name.trim()||p.name,age:age.trim()}); }} style={{flex:1,padding:"11px 0",borderRadius:10,border:"none",background:grad,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:700}}>저장</button>
         </div>
       </div>
     </div>
@@ -511,14 +550,36 @@ function EditModal({profile,onSave,onClose}:{profile:Persona;onSave:(p:Persona)=
 }
 
 // ── SettingsTab ──
-function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,setLocation,onClearChat,onClose}:{fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;location:string;setLocation:(l:string)=>void;onClearChat:()=>void;onClose:()=>void}) {
+function SettingsTab({friend,fontSize,setFontSize,fontFamily,setFontFamily,location,setLocation,onClearChat,onClose,onRevokeConsent}:{friend:Persona;fontSize:number;setFontSize:(f:number|((n:number)=>number))=>void;fontFamily:string;setFontFamily:(f:string)=>void;location:string;setLocation:(l:string)=>void;onClearChat:()=>void;onClose:()=>void;onRevokeConsent:()=>void}) {
   const [confirmDelete,setConfirmDelete]=useState(false);
+  const [checkInOn,setCheckInOn]=useState(checkInEnabled);
+  const [checkInBusy,setCheckInBusy]=useState(false);
+  const [checkInError,setCheckInError]=useState("");
+  async function toggleCheckIn() {
+    setCheckInBusy(true); setCheckInError("");
+    try { await setCheckInEnabled(!checkInOn,friend); setCheckInOn(!checkInOn); }
+    catch (error) { setCheckInError(error instanceof Error ? error.message : "알림 설정에 실패했어요."); }
+    finally { setCheckInBusy(false); }
+  }
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,padding:28,paddingBottom:36,fontFamily}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,maxHeight:"85vh",overflowY:"auto",padding:28,paddingBottom:36,fontFamily}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
           <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
+        </div>
+        <div style={{fontSize:13,lineHeight:1.8,marginBottom:20}}>
+          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">개인정보 처리방침</a>
+          {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>문의하기</a><br/>
+          <button onClick={onRevokeConsent} style={{marginTop:8,padding:"8px 12px",cursor:"pointer"}}>외부 데이터 전송 동의 철회</button>
+        </div>
+        <div style={{marginBottom:24}}>
+          <label style={{display:"flex",gap:10,alignItems:"center"}}>
+            <input type="checkbox" checked={checkInOn} disabled={checkInBusy} onChange={()=>void toggleCheckIn()}/>
+            4일 동안 대화가 없으면 안부 메시지 받기
+          </label>
+          <div style={{fontSize:12,color:"#777",marginTop:6}}>마지막으로 대화한 친구가 한 번만 안부를 보내요. 새 대화를 보내면 4일을 다시 계산해요.</div>
+          {checkInError&&<div role="alert" style={{fontSize:13,color:"#b33",marginTop:6}}>{checkInError}</div>}
         </div>
         {/* 사용자 위치 설정 */}
         <div style={{marginBottom:28}}>
@@ -594,7 +655,7 @@ function SettingsTab({fontSize,setFontSize,fontFamily,setFontFamily,location,set
 }
 
 // ── Chat ──
-function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;updatePersona:(id:string,fn:(p:Persona)=>Persona)=>void}) {
+function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;onBack:()=>void;onRevokeConsent:()=>void;updatePersona:(id:string,fn:(p:Persona)=>Persona)=>void}) {
   const [aiLoading,setAiLoading]=useState(false);
   const [input,setInput]=useState("");
   const [showEdit,setShowEdit]=useState(false);
@@ -624,6 +685,9 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
     });
   }, []);
   const saveLocation = (loc: string) => {
+    locationRef.current = loc;
+    weatherRef.current = "";
+    setWeather("");
     setLocation(loc);
     storageSet(LOCATION_KEY, loc, false);
     fetchWeather(loc).then(setWeather);
@@ -644,7 +708,11 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
     }
     setAiLoading(true);
     const history: ClaudeMsg[]=msgs.map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text}));
-    callDeepseek(buildSystem(p, locationRef.current, weatherRef.current),history)
+    const replyLocation = locationRef.current;
+    return fetchWeather(replyLocation).then(latestWeather => {
+      if (locationRef.current === replyLocation) { weatherRef.current = latestWeather; setWeather(latestWeather); }
+      return callDeepseek(buildSystem(p, replyLocation, latestWeather),history);
+    })
       .then(raw=>{
         const reply=raw.trim();
         if(!reply){
@@ -658,7 +726,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
         });
       }).catch(err=>{
         setAiLoading(false);
-        const msg = `(연결 실패: ${err.message})`;
+        const msg = err?.name === "AbortError" ? "(응답 시간이 초과됐어요. 다시 시도해주세요)" : err?.message?.startsWith("API_ERROR:") ? `(${err.message.slice(10)})` : "(연결에 실패했어요. 잠시 후 다시 시도해주세요)";
         updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:msg,translation:"",alternatives:[]}]}));
       });
   },[updatePersona]);
@@ -722,7 +790,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
     return true;
   }
   function sendMessage() {
-    if(!input.trim() || sendingRef.current) return;
+    if(!input.trim() || sendingRef.current || aiLoading) return;
     if(!checkRateLimit()){
       setRateLimitMsg("메시지를 너무 빠르게 보내고 있어요. 잠시 후 다시 시도해주세요.");
       setTimeout(()=>setRateLimitMsg(""), 4000);
@@ -734,28 +802,29 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
       return;
     }
     sendingRef.current = true;
+    void recordCheckInActivity(personaRef.current).catch(()=>setRateLimitMsg("안부 알림을 예약하지 못했어요. 알림 권한을 확인해 주세요."));
     const text=input.trim().slice(0,500); setInput("");
-    setTimeout(()=>{ sendingRef.current = false; }, 300); // 더블클릭 방지용 짧은 잠금
     const userMsg: Message={role:"user",text,translation:"",alternatives:[]};
-    let snapshot: Message[]=[];
-    updatePersona(persona.id,p=>{snapshot=[...p.messages,userMsg];return{...p,messages:snapshot};});
-    translateWithAlts(text).then(trans=>{
+    const snapshot = [...personaRef.current.messages,userMsg];
+    updatePersona(persona.id,p=>({...p,messages:snapshot}));
+    const translation = translateWithAlts(text).then(trans=>{
       updatePersona(persona.id,p=>{
         const msgs=[...p.messages];
-        const idx=msgs.map(m=>m.role).lastIndexOf("user");
-        if(idx!==-1) msgs[idx]={...msgs[idx],translation:trans.translation,alternatives:trans.alternatives};
+        const idx=snapshot.length-1;
+        if(msgs[idx]?.role==="user" && msgs[idx].text===text) msgs[idx]={...msgs[idx],translation:trans.translation,alternatives:trans.alternatives};
         return{...p,messages:msgs};
       });
     });
-    setTimeout(()=>genReply([...personaRef.current.messages,userMsg]),0);
+    Promise.all([translation, genReply(snapshot)]).finally(()=>{ sendingRef.current=false; });
   }
 
   function clearChat() {
     updatePersona(persona.id, p => ({...p, messages: []}));
   }
 
-  const FAILURE_TEXTS = new Set(["(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)","(응답을 받지 못했어요. 다시 시도해주세요)","(연결에 실패했어요. 잠시 후 다시 시도해주세요)","(API 키가 유효하지 않아요. 설정에서 키를 다시 확인해주세요)"]);
+  const FAILURE_TEXTS = new Set(["(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)","(응답을 받지 못했어요. 다시 시도해주세요)","(연결에 실패했어요. 잠시 후 다시 시도해주세요)","(API 키가 유효하지 않아요. 설정에서 키를 다시 확인해주세요)","(응답 시간이 초과됐어요. 다시 시도해주세요)"]);
   function retryReply(msgIndex: number) {
+    if(aiLoading || sendingRef.current) return;
     const p = personaRef.current;
     const before = p.messages.slice(0, msgIndex);
     updatePersona(persona.id, pr=>({...pr, messages: pr.messages.slice(0, msgIndex)}));
@@ -779,7 +848,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f2f5",maxWidth:500,margin:"0 auto",fontFamily}}>
       {showEdit&&<EditModal profile={persona} onSave={p=>{updatePersona(persona.id,()=>p);setShowEdit(false);}} onClose={()=>setShowEdit(false)}/>}
-      {showSettings&&<SettingsTab fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} location={location} setLocation={saveLocation} onClearChat={clearChat} onClose={()=>setShowSettings(false)}/>}
+      {showSettings&&<SettingsTab friend={persona} fontSize={fontSize} setFontSize={setFontSize} fontFamily={fontFamily} setFontFamily={setFontFamily} location={location} setLocation={saveLocation} onClearChat={clearChat} onRevokeConsent={onRevokeConsent} onClose={()=>setShowSettings(false)}/>}
       {/* Header — 고정 */}
       <div style={{
         background:"#fff",
@@ -831,7 +900,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
               {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name}</div>}
               <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
                 {m.text}
-                {!isMe&&FAILURE_TEXTS.has(m.text)&&(
+                {!isMe&&(FAILURE_TEXTS.has(m.text) || /\(HTTP \d{3}\)\)$/.test(m.text))&&(
                   <div style={{marginTop:6}}>
                     <button onClick={()=>retryReply(i)} style={{fontSize:12,padding:"4px 10px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa",color:"#555",cursor:"pointer"}}>다시 시도</button>
                   </div>
@@ -867,7 +936,7 @@ function Chat({persona,onBack,updatePersona}:{persona:Persona;onBack:()=>void;up
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}}
           placeholder={`${persona.name}에게 메시지 보내기...`} rows={1}
           style={{flex:1,border:"1.5px solid #ddd",borderRadius:12,padding:"10px 13px",fontSize:14,resize:"none",outline:"none",fontFamily,lineHeight:1.5,maxHeight:120,overflowY:"auto"}}/>
-        <button onClick={sendMessage} disabled={!input.trim()} aria-label="전송" style={{width:42,height:42,borderRadius:12,border:"none",background:input.trim()?"#4a9fff":"#ccc",cursor:input.trim()?"pointer":"default",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
+        <button onClick={sendMessage} disabled={!input.trim() || aiLoading} aria-label="전송" style={{width:42,height:42,borderRadius:12,border:"none",background:input.trim()?"#4a9fff":"#ccc",cursor:input.trim()?"pointer":"default",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
       </div>
       {input.length>400&&(
         <div style={{textAlign:"right",padding:"0 14px 6px",fontSize:11,color:input.length>=500?"#e05555":"#aaa",background:"#fff"}}>{input.length}/500</div>
@@ -885,6 +954,23 @@ export default function App() {
   const [personas,setPersonas]=useState<Persona[]>([]);
   const [activeId,setActiveId]=useState<string|null>(null);
   const [lastExportAt,setLastExportAt]=useState<number|null>(null);
+  const currentPersonas=useRef(personas);
+  currentPersonas.current=personas;
+  useEffect(()=>{
+    if(screen==="loading" || screen==="consent") return;
+    const receive=async (open=false, targetId?:string)=>{
+      const pending=await takeDueCheckIn();
+      if(pending) setPersonas(prev=>prev.map(p=>p.id===pending.personaId ? {...p,messages:[...p.messages,{role:"ai",text:pending.text,translation:"How have you been? I'd love to hear how your days have been. Talk to me whenever you feel like it.",alternatives:[]}]} : p));
+      const id=targetId || pending?.personaId;
+      if(open && id && currentPersonas.current.some(p=>p.id===id)) navigate("chat",id);
+    };
+    const refresh=()=>{ if(document.visibilityState==="visible") void receive(); };
+    const stop=listenForCheckIn((open,id)=>{void receive(open,id);});
+    document.addEventListener("visibilitychange",refresh);
+    const timer=setInterval(refresh,60000);
+    void receive();
+    return ()=>{stop();clearInterval(timer);document.removeEventListener("visibilitychange",refresh);};
+  },[screen==="loading",screen==="consent"]);
   const BACKUP_REMINDER_MS = 7*24*60*60*1000; // 7일
 
   useEffect(()=>{
@@ -892,7 +978,7 @@ export default function App() {
     loadPersonas().then(async saved=>{
       const initial = saved.length>0 ? "list" : "landing";
       if(saved.length>0) setPersonas(saved);
-      const consent = await storageGet(CONSENT_KEY, false);
+      const consent = (await storageGet(CONSENT_KEY, false))?.value === "1";
       let first: "consent"|"landing"|"list"|"chat" = consent ? initial : "consent";
       let firstActiveId: string|null = null;
       if(consent) {
@@ -913,6 +999,12 @@ export default function App() {
       setScreen(first);
     });
   },[]);
+
+  async function revokeConsent() {
+    await cancelCheckIn();
+    await storageSet(CONSENT_KEY, "", false);
+    window.location.reload();
+  }
 
   function agreeConsent() {
     storageSet(CONSENT_KEY, "1", false);
@@ -947,6 +1039,7 @@ export default function App() {
     setPersonas(prev=>prev.map(p=>p.id===id?fn(p):p));
   }
   function deletePersona(id:string) {
+    void cancelCheckIn(id);
     setPersonas(prev=>prev.filter(p=>p.id!==id));
     if(activeId===id) setActiveId(null);
   }
@@ -972,7 +1065,7 @@ export default function App() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result));
-        if(!Array.isArray(parsed)) throw new Error("invalid format");
+        if(!isPersonaList(parsed)) throw new Error("invalid format");
         setPersonas(parsed as Persona[]);
       } catch {
         window.alert("백업 파일을 읽을 수 없어요. 형식을 확인해주세요.");
@@ -992,6 +1085,6 @@ export default function App() {
     return <>{fl}<PersonaList personas={personas} activeId={activeId} onSelect={id=>navigate("chat",id)} onCreate={()=>navigate("setup")} onBack={()=>navigate("landing")} onDelete={deletePersona} onExport={exportBackup} onImport={importBackup} showBackupReminder={showBackupReminder}/></>;
   }
   if(screen==="setup") return <>{fl}<SetupWizard onDone={handleSetupDone} onCancel={()=>navigate(personas.length>0?"list":"landing")}/></>;
-  if(screen==="chat"&&active) return <>{fl}<Chat persona={active} onBack={()=>navigate("list")} updatePersona={updatePersona}/></>;
+  if(screen==="chat"&&active) return <>{fl}<Chat persona={active} onBack={()=>navigate("list")} updatePersona={updatePersona} onRevokeConsent={revokeConsent}/></>;
   return null;
 }

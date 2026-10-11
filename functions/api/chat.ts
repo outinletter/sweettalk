@@ -1,18 +1,19 @@
 interface Env {
   DEEPSEEK_API_KEY: string;
-  // Cloudflare Dashboard -> Workers & Pages -> KV 에서 생성 후 바인딩 필요:
+  // Create and bind this in Cloudflare Dashboard -> Workers & Pages -> KV:
   //   Variable name: RATE_LIMIT_KV
-  // (KV 바인딩이 없으면 제한 없이 통과 — 서비스 중단 방지 폴백)
+  // If KV is not bound, requests pass without limits as a service continuity fallback.
   RATE_LIMIT_KV?: { get(key: string): Promise<string | null>; put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> };
 }
 
-// ── 사용량 제한 설정 ──
-const RATE_LIMIT_PER_DAY = 100;        // IP당 1일 최대 요청 수
+// ── Rate limit configuration ──
+const RATE_LIMIT_PER_DAY = 100;        // Maximum requests per IP per day
 const RATE_LIMIT_WINDOW_SECONDS = 86400;
+const SAFETY_POLICY = `Safety policy: This is a 14+ service. Never generate sexual, erotic, suggestive, exploitative, or pornographic content. Never generate romantic or sexual content involving anyone under 18. Do not encourage emotional dependency, exclusivity, secrecy, isolation, or treating the AI as a real person. If the user mentions self-harm, suicide, abuse, or immediate danger, respond empathetically and direct them to a trusted person and local emergency/crisis services without providing instructions or methods.`;
 
 async function checkRateLimit(env: Env, clientIp: string): Promise<{ allowed: boolean; remaining: number }> {
   const kv = env.RATE_LIMIT_KV;
-  if (!kv) return { allowed: true, remaining: -1 }; // KV 미바인딩 시 제한 스킵
+  if (!kv) return { allowed: true, remaining: -1 }; // Skip limits when KV is not bound
 
   const now = Math.floor(Date.now() / 1000);
   const key = `rl:${clientIp}:${Math.floor(now / RATE_LIMIT_WINDOW_SECONDS)}`;
@@ -23,12 +24,12 @@ async function checkRateLimit(env: Env, clientIp: string): Promise<{ allowed: bo
     if (count >= RATE_LIMIT_PER_DAY) {
       return { allowed: false, remaining: 0 };
     }
-    // TTL은 윈도우 종료까지 남은 시간 + 버퍼
+    // TTL covers the remaining window plus a buffer.
     const windowEnd = (Math.floor(now / RATE_LIMIT_WINDOW_SECONDS) + 1) * RATE_LIMIT_WINDOW_SECONDS;
     await kv.put(key, String(count + 1), { expirationTtl: windowEnd - now + 60 });
     return { allowed: true, remaining: RATE_LIMIT_PER_DAY - count - 1 };
   } catch {
-    return { allowed: true, remaining: -1 }; // KV 오류 시 서비스 지속 우선
+    return { allowed: true, remaining: -1 }; // Keep the service available if KV fails
   }
 }
 
@@ -59,17 +60,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const apiKey = env.DEEPSEEK_API_KEY || env.DEEPSEEK_KEY || env.API_KEY || env.deepseek_api_key;
 
     if (!apiKey) {
-      const availableKeys = Object.keys(env).join(", ");
       return new Response(JSON.stringify({
         error: "DeepSeek API key is not configured.",
-        debug: `Available env keys: [${availableKeys}]. Please set DEEPSEEK_API_KEY in Cloudflare Pages Settings -> Environment variables and REDEPLOY.`,
+        debug: "Set DEEPSEEK_API_KEY in Cloudflare Pages Environment variables and redeploy.",
       }), {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders(request) },
       });
     }
 
-    // ── 사용량 제한 검사 ──
+    // ── Rate limit check ──
     const clientIp = getClientIp(request);
     const rl = await checkRateLimit(env, clientIp);
     if (!rl.allowed) {
@@ -88,7 +88,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const body = await request.json();
 
-    // ── 입력 크기 제한 (악용 방지) ──
+    // ── Payload size limits to prevent abuse ──
     const messages = body?.messages;
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > 60) {
       return new Response(JSON.stringify({ error: "Invalid messages payload." }), {
@@ -105,7 +105,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }
     }
 
-    // DeepSeek API 호출
+    // Always append the safety policy server-side so clients cannot override it.
+    const systemIndex = messages.findIndex((m: any) => m.role === "system");
+    const safeMessages = messages.map((m: any, index: number) =>
+      index === systemIndex
+        ? { ...m, content: `${m.content}\n${SAFETY_POLICY}` }
+        : m
+    );
+    if (systemIndex === -1) {
+      safeMessages.unshift({ role: "system", content: SAFETY_POLICY });
+    }
+
+    // Call the DeepSeek API
     const response = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
       headers: {
@@ -114,7 +125,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       },
       body: JSON.stringify({
         model: typeof body.model === "string" ? body.model : "deepseek-chat",
-        messages,
+        messages: safeMessages,
         max_tokens: Math.min(Number(body.max_tokens) || 2048, 2048),
         temperature: Number(body.temperature) ?? 0.9,
         stream: false,

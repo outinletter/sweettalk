@@ -1,0 +1,717 @@
+{
+  "환경설정": [
+    "Settings",
+    "環境設定",
+    "设置"
+  ],
+  "언어": [
+    "Language",
+    "言語",
+    "语言"
+  ],
+  "날씨 및 위치 사용 (선택)": [
+    "Weather and location (optional)",
+    "天気・地域を使用（任意）",
+    "使用天气和位置（可选）"
+  ],
+  "내보내기 및 삭제": [
+    "Export and delete",
+    "エクスポートと削除",
+    "导出与删除"
+  ],
+  "모든 기기 데이터 삭제": [
+    "Delete all app data",
+    "すべてのアプリデータを削除",
+    "删除所有应用数据"
+  ],
+  "신고 문의": [
+    "Report a concern",
+    "問題を報告",
+    "举报问题"
+  ],
+  "신고 내용을 복사한 뒤 아래 지원 페이지에서 문의할 수 있습니다.": [
+    "Copy the report and contact support using the page below.",
+    "報告をコピーし、下のサポートページからお問い合わせください。",
+    "复制举报内容后，通过下方支持页面联系。"
+  ],
+  "복사": [
+    "Copy",
+    "コピー",
+    "复制"
+  ],
+  "취소": [
+    "Cancel",
+    "キャンセル",
+    "取消"
+  ],
+  "닫기": [
+    "Close",
+    "閉じる",
+    "关闭"
+  ],
+  "시작하기": [
+    "Get started",
+    "始める",
+    "开始"
+  ],
+  "처음으로": [
+    "Home",
+    "ホーム",
+    "首页"
+  ],
+  "뒤로가기": [
+    "Back",
+    "戻る",
+    "返回"
+  ],
+  "다음": [
+    "Next",
+    "次へ",
+    "下一步"
+  ],
+  "완료": [
+    "Done",
+    "完了",
+    "完成"
+  ],
+  "이전으로": [
+    "Previous",
+    "前へ",
+    "上一步"
+  ],
+  "저장": [
+    "Save",
+    "保存",
+    "保存"
+  ],
+  "삭제": [
+    "Delete",
+    "削除",
+    "删除"
+  ],
+  "삭제하기": [
+    "Delete",
+    "削除する",
+    "删除"
+  ],
+  "예": [
+    "Yes",
+    "はい",
+    "是"
+  ],
+  "아니오": [
+    "No",
+    "いいえ",
+    "否"
+  ],
+  "다시 시도": [
+    "Retry",
+    "再試行",
+    "重试"
+  ],
+  "편집": [
+    "Edit",
+    "編集",
+    "编辑"
+  ],
+  "설정": [
+    "Settings",
+    "設定",
+    "设置"
+  ],
+  "전송": [
+    "Send",
+    "送信",
+    "发送"
+  ],
+  "개인정보 처리방침": [
+    "Privacy policy",
+    "プライバシーポリシー",
+    "隐私政策"
+  ],
+  "이용약관": [
+    "Terms of use",
+    "利用規約",
+    "使用条款"
+  ],
+  "문의하기": [
+    "Contact support",
+    "お問い合わせ",
+    "联系支持"
+  ],
+  "시작하기 전에 확인해주세요": [
+    "Before you start",
+    "始める前に",
+    "开始之前"
+  ],
+  "SweetTalk의 대화 상대는 AI가 생성한 가상의 캐릭터이며, 실제 인간관계를 대체하지 않습니다.": [
+    "Your companion is a fictional AI character and does not replace real relationships.",
+    "会話相手は架空のAIキャラクターであり、実際の人間関係の代わりではありません。",
+    "对话对象是虚构的AI角色，不能代替真实的人际关系。"
+  ],
+  "본 서비스는 만 18세 이상만 이용할 수 있습니다.": [
+    "You must be at least 18 to use this service.",
+    "このサービスは18歳以上が対象です。",
+    "本服务仅限18岁及以上使用。"
+  ],
+  "AI 응답과 번역을 위해 대화 내용과 캐릭터 설정이 Cloudflare를 통해 DeepSeek에 전송됩니다. 입력한 위치는 날씨 조회를 위해 wttr.in에, 대화 맥락을 위해 DeepSeek에 전송됩니다. 민감한 개인정보는 입력하지 마세요.": [
+    "Messages, character settings and AI replies are sent through Cloudflare to DeepSeek for generation, translation and safety checks. If weather is enabled, the entered location is sent to wttr.in and DeepSeek. Do not enter sensitive personal data.",
+    "応答・翻訳・安全検査のため、会話・キャラクター設定・AI応答がCloudflare経由でDeepSeekに送信されます。天気を有効にした場合、入力した地域がwttr.inとDeepSeekに送信されます。機密情報を入力しないでください。",
+    "对话、角色设置和AI回复通过Cloudflare发送至DeepSeek，用于生成、翻译和安全检查。启用天气后，输入的地区会发送至wttr.in和DeepSeek。请勿输入敏感个人信息。"
+  ],
+  "위 내용을 확인했으며 만 18세 이상입니다": [
+    "I have read the notice and am at least 18.",
+    "内容を確認し、18歳以上です。",
+    "我已阅读以上说明且年满18岁。"
+  ],
+  "위 데이터의 외부 서비스 전송에 동의합니다": [
+    "I consent to sending this data to the listed services.",
+    "記載された外部サービスへのデータ送信に同意します。",
+    "我同意将上述数据发送至所列外部服务。"
+  ],
+  "동의하고 시작하기": [
+    "Agree and continue",
+    "同意して続ける",
+    "同意并继续"
+  ],
+  "외부 데이터 전송 동의 철회": [
+    "Withdraw data sharing consent",
+    "データ送信の同意を撤回",
+    "撤回数据传输同意"
+  ],
+  "AI 연인 채팅": [
+    "Fictional AI companion",
+    "架空のAIパートナー",
+    "虚构AI伴侣"
+  ],
+  "AI 연인 채팅 + 영어 번역": [
+    "AI companion and language practice",
+    "AIパートナーと言語練習",
+    "AI伴侣与语言练习"
+  ],
+  "설레는 대화, 자연스러운 영어로": [
+    "Conversation and useful expressions",
+    "会話と役立つ表現",
+    "对话与实用表达"
+  ],
+  "실시간 영어 번역": [
+    "Message translation",
+    "メッセージ翻訳",
+    "消息翻译"
+  ],
+  "다른 표현 2가지": [
+    "One alternative expression",
+    "別の表現を1つ",
+    "一种替代表达"
+  ],
+  "이름, 성격, 말투, 관심사까지\n설정하여 나만의 연인과 대화": [
+    "Customize a fictional adult character",
+    "架空の成人キャラクターを設定",
+    "自定义虚构成年角色"
+  ],
+  "상대방의 메시지를 바로\n자연스러운 영어로 번역": [
+    "Read a translation alongside each message",
+    "各メッセージの翻訳を確認",
+    "查看每条消息的翻译"
+  ],
+  "같은 의미의 다양한 표현으로\n영어 실력도 함께 향상": [
+    "Practice another way to say the same thing",
+    "同じ意味の別の表現を練習",
+    "练习同一含义的另一种表达"
+  ],
+  "설레는 대화로": [
+    "Through conversation",
+    "会話を通じて",
+    "通过对话"
+  ],
+  "영어 실력이 자라요": [
+    "Practice useful expressions",
+    "役立つ表現を練習",
+    "练习实用表达"
+  ],
+  "연인 목록": [
+    "Companions",
+    "パートナー一覧",
+    "伴侣列表"
+  ],
+  "+ 새 연인 추가": [
+    "+ Add companion",
+    "+ パートナーを追加",
+    "+ 添加伴侣"
+  ],
+  "아직 만든 연인이 없어요": [
+    "No companions yet",
+    "パートナーはまだいません",
+    "暂无伴侣"
+  ],
+  "위 버튼을 눌러 첫 연인을 만들어보세요": [
+    "Add your first fictional character above",
+    "上のボタンでキャラクターを作成",
+    "点击上方按钮创建首个角色"
+  ],
+  "대화 없음": [
+    "No messages",
+    "会話なし",
+    "暂无消息"
+  ],
+  "대화 중": [
+    "Active",
+    "会話中",
+    "对话中"
+  ],
+  "와의 대화를 삭제할까요?": [
+    ": delete this conversation?",
+    "との会話を削除しますか？",
+    "：删除此对话？"
+  ],
+  "세": [
+    " years old",
+    "歳",
+    "岁"
+  ],
+  "세 ·": [
+    " years ·",
+    "歳 ·",
+    "岁 ·"
+  ],
+  "백업 내보내기": [
+    "Export backup",
+    "バックアップを書き出す",
+    "导出备份"
+  ],
+  "백업 가져오기": [
+    "Import backup",
+    "バックアップを読み込む",
+    "导入备份"
+  ],
+  "대화는 이 기기에만 저장돼요. 앱 삭제·기기 변경 전에 아래 &apos;백업 내보내기&apos;로 저장해두세요.": [
+    "History is stored on this device. Export a backup before uninstalling or changing devices.",
+    "履歴はこの端末に保存されます。削除や機種変更の前にバックアップしてください。",
+    "记录保存在此设备上。卸载或更换设备前请导出备份。"
+  ],
+  "연인의 성별을 선택해주세요": [
+    "Choose your companion's gender",
+    "パートナーの性別を選択",
+    "选择伴侣性别"
+  ],
+  "연인의 이름은 무엇인가요?": [
+    "Name your companion",
+    "パートナーの名前は？",
+    "伴侣叫什么名字？"
+  ],
+  "연인의 나이는?": [
+    "Your companion's age?",
+    "パートナーの年齢は？",
+    "伴侣年龄？"
+  ],
+  "성격을 선택해주세요": [
+    "Choose a personality",
+    "性格を選択",
+    "选择性格"
+  ],
+  "말투 스타일은?": [
+    "Choose a speaking style",
+    "話し方を選択",
+    "选择说话风格"
+  ],
+  "주요 관심사는?": [
+    "Choose interests",
+    "興味を選択",
+    "选择兴趣"
+  ],
+  "예: 지수, 민준...": [
+    "Example: Alex, Sam…",
+    "例：さくら、はると…",
+    "例如：小雨、明轩…"
+  ],
+  "예: 24": [
+    "Example: 24",
+    "例：24",
+    "例如：24"
+  ],
+  "여자친구": [
+    "Female companion",
+    "女性パートナー",
+    "女性伴侣"
+  ],
+  "남자친구": [
+    "Male companion",
+    "男性パートナー",
+    "男性伴侣"
+  ],
+  "다정하고 따뜻한": [
+    "Kind and warm",
+    "優しく温かい",
+    "温柔亲切"
+  ],
+  "츤데레": [
+    "Reserved but caring",
+    "素直ではないが優しい",
+    "外冷内热"
+  ],
+  "밝고 활발한": [
+    "Bright and lively",
+    "明るく活発",
+    "开朗活泼"
+  ],
+  "조용하고 지적인": [
+    "Quiet and thoughtful",
+    "静かで知的",
+    "安静聪慧"
+  ],
+  "장난기 많은": [
+    "Playful",
+    "遊び心がある",
+    "爱开玩笑"
+  ],
+  "애교 섞인 말투": [
+    "Affectionate",
+    "親しみのある話し方",
+    "亲切可爱"
+  ],
+  "반말로 편하게": [
+    "Casual",
+    "カジュアル",
+    "轻松随意"
+  ],
+  "존댓말로 다정하게": [
+    "Warm and polite",
+    "丁寧で優しい",
+    "温柔礼貌"
+  ],
+  "직설적이고 솔직한": [
+    "Direct and honest",
+    "率直で正直",
+    "直接坦诚"
+  ],
+  "카페·맛집 탐방": [
+    "Cafés and food",
+    "カフェ・グルメ",
+    "咖啡与美食"
+  ],
+  "독서·영화": [
+    "Books and movies",
+    "読書・映画",
+    "阅读与电影"
+  ],
+  "음악·공연": [
+    "Music and shows",
+    "音楽・ライブ",
+    "音乐与演出"
+  ],
+  "운동·여행": [
+    "Fitness and travel",
+    "運動・旅行",
+    "运动与旅行"
+  ],
+  "게임·애니": [
+    "Games and animation",
+    "ゲーム・アニメ",
+    "游戏与动漫"
+  ],
+  "캐릭터 나이는 18~99세로 입력해주세요.": [
+    "Character age must be 18–99.",
+    "キャラクターは18〜99歳にしてください。",
+    "角色年龄须为18至99岁。"
+  ],
+  "정말 취소할까요?": [
+    "Discard setup?",
+    "設定を取り消しますか？",
+    "放弃设置？"
+  ],
+  "페르소나 편집": [
+    "Edit character",
+    "キャラクターを編集",
+    "编辑角色"
+  ],
+  "성별": [
+    "Gender",
+    "性別",
+    "性别"
+  ],
+  "성격": [
+    "Personality",
+    "性格",
+    "性格"
+  ],
+  "말투": [
+    "Speaking style",
+    "話し方",
+    "说话风格"
+  ],
+  "관심사": [
+    "Interests",
+    "興味",
+    "兴趣"
+  ],
+  "이름": [
+    "Name",
+    "名前",
+    "名字"
+  ],
+  "나이": [
+    "Age",
+    "年齢",
+    "年龄"
+  ],
+  "4일 동안 대화가 없으면 안부 메시지 받기": [
+    "Reminder after four inactive days",
+    "4日間会話がない場合に通知",
+    "四天未对话后提醒"
+  ],
+  "마지막으로 대화한 친구가 한 번만 안부를 보내요. 새 대화를 보내면 4일을 다시 계산해요.": [
+    "A local reminder is scheduled once. Sending a message resets the four-day timer.",
+    "ローカル通知を1回予約します。新しい会話で4日間を数え直します。",
+    "安排一次本地提醒。发送新消息会重置四天计时。"
+  ],
+  "내 위치 설정 (현실적인 대화를 위해)": [
+    "Location for optional weather",
+    "天気用の地域（任意）",
+    "用于天气的地区（可选）"
+  ],
+  "예: 서울 강남구, 제주도...": [
+    "Example: Seoul, Tokyo…",
+    "例：東京、大阪…",
+    "例如：首尔、北京…"
+  ],
+  "위치를 입력하면 AI가 시간과 장소에 맞는 대화를 해줘요.": [
+    "Enable weather to share the entered area for weather-aware replies.",
+    "天気を有効にすると、入力した地域を送信します。",
+    "启用天气后会传输输入的地区，用于天气相关回复。"
+  ],
+  "글꼴": [
+    "Font",
+    "フォント",
+    "字体"
+  ],
+  "글자 크기": [
+    "Text size",
+    "文字サイズ",
+    "字号"
+  ],
+  "글자 크기 줄이기": [
+    "Decrease text size",
+    "文字を小さく",
+    "减小字号"
+  ],
+  "글자 크기 늘리기": [
+    "Increase text size",
+    "文字を大きく",
+    "增大字号"
+  ],
+  "안녕, 오늘 어때? Hi there!": [
+    "Hi there! How is your day?",
+    "こんにちは！今日はどう？",
+    "你好！今天怎么样？"
+  ],
+  "기본값으로 초기화 (": [
+    "Reset to default (",
+    "初期値に戻す（",
+    "恢复默认（"
+  ],
+  "대화 관리": [
+    "Manage history",
+    "履歴の管理",
+    "管理记录"
+  ],
+  "대화 내용 전체 삭제": [
+    "Delete this chat history",
+    "この会話履歴を削除",
+    "删除此对话记录"
+  ],
+  "정말 삭제할까요? 되돌릴 수 없어요.": [
+    "Delete permanently? This cannot be undone.",
+    "完全に削除しますか？元に戻せません。",
+    "永久删除？此操作无法撤销。"
+  ],
+  "영어 번역 접기": [
+    "Collapse translation",
+    "翻訳を折りたたむ",
+    "收起翻译"
+  ],
+  "영어 번역 펼치기": [
+    "Expand translation",
+    "翻訳を開く",
+    "展开翻译"
+  ],
+  "번역에 실패했어요": [
+    "Translation failed",
+    "翻訳できませんでした",
+    "翻译失败"
+  ],
+  "다른 표현:": [
+    "Alternative:",
+    "別の表現：",
+    "替代表达："
+  ],
+  "오프라인 상태입니다. 네트워크 연결을 확인해주세요.": [
+    "Offline. Check your connection.",
+    "オフラインです。接続を確認してください。",
+    "当前离线，请检查网络。"
+  ],
+  "다시 연결되었어요. 메시지를 보낼 수 있어요.": [
+    "Connected. You can send messages.",
+    "接続しました。送信できます。",
+    "已连接，可以发送消息。"
+  ],
+  "AI 응답 신고": [
+    "Report AI response",
+    "AIの応答を報告",
+    "举报AI回复"
+  ],
+  "응답 신고": [
+    "Report response",
+    "応答を報告",
+    "举报回复"
+  ],
+  "SweetTalk 불러오는 중...": [
+    "Loading SweetTalk…",
+    "SweetTalkを読み込み中…",
+    "正在加载SweetTalk…"
+  ],
+  "백업 파일을 읽을 수 없어요. 형식을 확인해주세요.": [
+    "Cannot read backup. Check the file format.",
+    "バックアップを読み込めません。形式を確認してください。",
+    "无法读取备份，请检查文件格式。"
+  ],
+  "메시지": [
+    "messages",
+    "メッセージ",
+    "条消息"
+  ],
+  "대화는 이 기기에만 저장돼요. 앱 삭제·기기 변경 전에 백업 내보내기로 저장해두세요.": [
+    "History is stored on this device. Export a backup before uninstalling or changing devices.",
+    "履歴はこの端末に保存されます。削除や機種変更の前にバックアップしてください。",
+    "记录保存在此设备上。卸载或更换设备前请导出备份。"
+  ],
+  "Jua (둥글고 귀여운)": [
+    "Jua (rounded)",
+    "Jua（丸い）",
+    "Jua（圆润）"
+  ],
+  "Noto Sans KR (깔끔 가독성)": [
+    "Noto Sans KR (clear)",
+    "Noto Sans KR（読みやすい）",
+    "Noto Sans KR（清晰）"
+  ],
+  "Nanum Gothic (단정함)": [
+    "Nanum Gothic (simple)",
+    "Nanum Gothic（シンプル）",
+    "Nanum Gothic（简洁）"
+  ],
+  "Gamja Flower (손글씨 감성)": [
+    "Gamja Flower (handwritten)",
+    "Gamja Flower（手書き風）",
+    "Gamja Flower（手写）"
+  ],
+  "(번역 실패)": [
+    "(Translation failed)",
+    "（翻訳失敗）",
+    "（翻译失败）"
+  ],
+  "알림 설정에 실패했어요.": [
+    "Notification settings failed.",
+    "通知を設定できませんでした。",
+    "通知设置失败。"
+  ],
+  "(오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요)": [
+    "(Offline. Connect and retry.)",
+    "（オフラインです。接続後に再試行してください）",
+    "（当前离线，请联网后重试）"
+  ],
+  "(응답을 받지 못했어요. 다시 시도해주세요)": [
+    "(No response. Please retry.)",
+    "（応答がありません。再試行してください）",
+    "（未收到回复，请重试）"
+  ],
+  "(응답 시간이 초과됐어요. 다시 시도해주세요)": [
+    "(Request timed out. Please retry.)",
+    "（時間切れです。再試行してください）",
+    "（请求超时，请重试）"
+  ],
+  "(연결에 실패했어요. 잠시 후 다시 시도해주세요)": [
+    "(Connection failed. Please retry later.)",
+    "（接続できません。後で再試行してください）",
+    "（连接失败，请稍后重试）"
+  ],
+  "메시지를 너무 빠르게 보내고 있어요. 잠시 후 다시 시도해주세요.": [
+    "You are sending too quickly. Please wait.",
+    "送信が速すぎます。少しお待ちください。",
+    "发送过于频繁，请稍候。"
+  ],
+  "오늘의 대화 한도에 도달했어요. 내일 다시 이용해주세요.": [
+    "Daily limit reached. Please return tomorrow.",
+    "本日の上限です。明日またご利用ください。",
+    "已达今日上限，请明天再试。"
+  ],
+  "안부 알림을 예약하지 못했어요. 알림 권한을 확인해 주세요.": [
+    "Cannot schedule reminder. Check notification permission.",
+    "通知を予約できません。権限を確認してください。",
+    "无法安排提醒，请检查通知权限。"
+  ],
+  "대화 내용이 서버 길이 제한을 초과했어요": [
+    "Message exceeds the size limit.",
+    "メッセージが長すぎます。",
+    "消息超过长度限制。"
+  ],
+  "대화 목록 형식이 올바르지 않아요": [
+    "Invalid conversation format.",
+    "会話の形式が無効です。",
+    "对话格式无效。"
+  ],
+  "오늘의 사용 한도에 도달했어요": [
+    "Daily usage limit reached.",
+    "本日の利用上限です。",
+    "已达今日使用上限。"
+  ],
+  "대화 요청 형식에 문제가 있어요": [
+    "Invalid request.",
+    "リクエストが無効です。",
+    "请求无效。"
+  ],
+  "서버 API 인증에 실패했어요": [
+    "Service authentication failed.",
+    "サービスの認証に失敗しました。",
+    "服务认证失败。"
+  ],
+  "서버가 답변을 처리하지 못했어요": [
+    "The service could not process the reply.",
+    "サービスが応答を処理できませんでした。",
+    "服务无法处理回复。"
+  ],
+  "안부 알림은 설치된 앱에서 사용할 수 있어요.": [
+    "Reminders are available in the installed app.",
+    "通知はインストールしたアプリで利用できます。",
+    "提醒仅在安装的应用中可用。"
+  ],
+  "알림 권한이 허용되지 않았어요.": [
+    "Notification permission was not granted.",
+    "通知が許可されていません。",
+    "未授予通知权限。"
+  ],
+  "아이폰 설정에서 SweetTalk 알림을 허용해 주세요.": [
+    "Allow SweetTalk notifications in iPhone Settings.",
+    "iPhoneの設定でSweetTalkの通知を許可してください。",
+    "请在iPhone设置中允许SweetTalk通知。"
+  ],
+  "저장한 표현 복습": [
+    "Review saved expressions",
+    "保存した表現を復習",
+    "复习已保存表达"
+  ],
+  "대화에서 번역 옆 별 버튼으로 표현을 저장하세요.": [
+    "Save expressions using the star beside a translation.",
+    "翻訳の横の星で表現を保存できます。",
+    "点击翻译旁的星号保存表达。"
+  ],
+  "번역 확인": [
+    "Reveal translation",
+    "翻訳を表示",
+    "显示翻译"
+  ],
+  "표현 저장": [
+    "Save expression",
+    "表現を保存",
+    "保存表达"
+  ]
+}

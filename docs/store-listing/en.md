@@ -1,15 +1,7 @@
 # SweetTalk
 
-## Short description
-Practice natural language through friendly AI conversations.
+Fictional adult AI companion and language practice for users aged 18+.
 
-## Full description
-SweetTalk is an AI conversation app for practicing languages with a fictional friend and conversation companion.
+Choose Korean, English, Japanese or Simplified Chinese in Settings on the first screen. The interface and new AI replies use your selected language. English replies include Korean translations; other languages include English translations, with one alternative expression. Customize adult characters, keep local history, export/import backups, opt into weather context and local reminders, report AI responses and delete app data.
 
-- Customize a partner's name, personality, speaking style, and interests
-- Korean, English, Japanese, and Simplified Chinese support
-- Translate messages and view an alternative expression
-- Add location and weather context to conversations
-- Store conversations and personas locally with backup and restore
-
-AI responses are generated automatically and do not replace real people, professional advice, or emergency services.
+The AI is fictional and does not replace real relationships or professional advice. Explicit consent is required for sending data to external AI services for generation, translation and safety checks. Replies may be unavailable when safety checks fail. Existing history retains its original language.

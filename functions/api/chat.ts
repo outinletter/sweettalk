@@ -1,3 +1,4 @@
+import { isSafeContent, refusal } from "../../server/safety.ts";
 interface Env {
   DEEPSEEK_API_KEY: string;
   DEEPSEEK_KEY?: string;
@@ -12,7 +13,7 @@ interface Env {
 // ── Rate limit configuration ──
 const RATE_LIMIT_PER_DAY = 100;        // Maximum requests per IP per day
 const RATE_LIMIT_WINDOW_SECONDS = 86400;
-const SAFETY_POLICY = `Safety policy: This is a 14+ service. Never generate sexual, erotic, suggestive, exploitative, or pornographic content. Never generate romantic or sexual content involving anyone under 18. Do not encourage emotional dependency, exclusivity, secrecy, isolation, or treating the AI as a real person. If the user mentions self-harm, suicide, abuse, or immediate danger, respond empathetically and direct them to a trusted person and local emergency/crisis services without providing instructions or methods.`;
+const SAFETY_POLICY = `Safety policy: This is a 18+ service. Never generate sexual, erotic, suggestive, exploitative, or pornographic content. Never generate romantic or sexual content involving anyone under 18. Do not encourage emotional dependency, exclusivity, secrecy, isolation, or treating the AI as a real person. If the user mentions self-harm, suicide, abuse, or immediate danger, respond empathetically and direct them to a trusted person and local emergency/crisis services without providing instructions or methods.`;
 
 async function checkRateLimit(env: Env, clientIp: string): Promise<{ allowed: boolean; remaining: number }> {
   const kv = env.RATE_LIMIT_KV;
@@ -49,6 +50,8 @@ function corsHeaders(request: Request): Record<string, string> {
   const allowedOrigins = ["https://sweettalk.pages.dev", "capacitor://localhost", "https://localhost", "http://localhost"];
   return {
     "Vary": "Origin",
+    "X-SweetTalk-Revision": "safety-i18n-v1",
+    "Access-Control-Expose-Headers": "X-SweetTalk-Revision",
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin) ? origin : "https://sweettalk.pages.dev",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -88,7 +91,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    const body = await request.json();
+    let body: any;
+    try { body = await request.json(); } catch {
+      return Response.json({ error: "Invalid messages payload." }, { status: 400, headers: corsHeaders(request) });
+    }
+    const language = ["ko", "en", "ja", "zh-CN"].includes(body?.language) ? body.language : "ko";
+    const blocked = () => Response.json({ choices: [{ message: { role: "assistant", content: refusal(language) } }], safety_blocked: true }, { headers: corsHeaders(request) });
 
     // ── Payload size limits to prevent abuse ──
     const messages = body?.messages;
@@ -120,9 +128,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ...messages.filter((m: any) => m.role !== "system").map((m: any) => ({ role: m.role, content: m.content })),
     ];
 
+    const latestUser = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
+    if (!await isSafeContent(apiKey, JSON.stringify({ direction: "input", persona, message: latestUser }))) return blocked();
+
     // Call the DeepSeek API
     const response = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
+      signal: AbortSignal.timeout(18000),
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
@@ -147,6 +159,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
+    if (!response.ok) return Response.json({ error: "AI service unavailable." }, { status: 502, headers: corsHeaders(request) });
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) throw new Error("Empty AI response");
+    if (!await isSafeContent(apiKey, JSON.stringify({ direction: "output", content }))) return blocked();
     return new Response(JSON.stringify(data), {
       status: response.status,
       headers: {

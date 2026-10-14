@@ -1,3 +1,5 @@
+import { readPhrases, writePhrases, savePhrase, validPhrases } from "./phrasebook";
+import { t, languages, useLanguage, getLanguage, setLanguage, languageName, translationLanguage, weatherEnabled, setWeatherEnabled } from "./i18n";
 import { checkInEnabled, setCheckInEnabled, recordCheckInActivity, cancelCheckIn, takeDueCheckIn, listenForCheckIn } from "./checkIn";
 import { useState, useRef, useEffect, useCallback, CSSProperties } from "react";
 
@@ -40,7 +42,7 @@ const FONT_OPTIONS: {label:string; value:string}[] = [
 const DEFAULT_FONT_FAMILY = FONT_OPTIONS[1].value; // Noto Sans KR 기본
 const ICON_URL = "/SweetTalk.jpg"; // 로컬 번들 — 오프라인에서도 깨지지 않음
 const STORAGE_KEY = "personas_v1";
-const CONSENT_KEY = "consent_v2";
+const CONSENT_KEY = "consent_v3";
 const PRIVACY_URL = "/privacy.html";
 const TERMS_URL = "/terms.html";
 const SUPPORT_EMAIL = "outintube@gmail.com";
@@ -124,7 +126,7 @@ async function savePersonas(list: Persona[]): Promise<void> {
     console.warn("SweetTalk: 대화 저장 실패", e);
   }
 }
-function cacheKey(t: string): string { return "tr:"+t.trim().toLowerCase().replace(/\s+/g," ").slice(0,180); }
+function cacheKey(t: string): string { return `tr:${getLanguage()}:`+t.trim().toLowerCase().replace(/\s+/g," ").slice(0,180); }
 async function cacheGet(k: string): Promise<TransResult|null> {
   try { const r = await storageGet(k,true); return r?JSON.parse(r.value):null; } catch { return null; }
 }
@@ -152,12 +154,13 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
   // Cloudflare Worker 프록시 엔드포인트
   // Android/iOS WebView는 상대경로를 localhost로 해석하므로 반드시 절대경로 사용
   const url = "https://sweettalk.pages.dev/api/chat";
+  if ((localStorage.getItem(LS_PREFIX + CONSENT_KEY) || "") !== "1") return Promise.reject(new Error("Consent required"));
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  const timer = setTimeout(() => controller.abort(), 55000);
   return fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({...body, language: getLanguage()}),
     signal: controller.signal,
   }).then(async r => {
     if (!r.ok) {
@@ -172,6 +175,7 @@ function callDeepseek(system: string, msgs: ClaudeMsg[]): Promise<string> {
 
 // ── Weather API — wttr.in의 구조화된 현재 관측 자료 ──
 async function fetchWeather(location: string): Promise<string> {
+  if (!weatherEnabled() || localStorage.getItem(LS_PREFIX + CONSENT_KEY) !== "1") return "";
   if (!location.trim()) return "";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -199,13 +203,15 @@ function buildSystem(p: Persona, location?: string, weather?: string): string {
   p = {...p, name:p.name.slice(0,200), personality:p.personality.slice(0,200), tone:p.tone.slice(0,200), interest:p.interest.slice(0,200)};
   const role = p.gender==="여자친구"?"girlfriend":"boyfriend";
   const now = new Date();
-  const dateStr = now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
-  const timeStr = now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = now.toLocaleDateString(getLanguage(), { month: "long", day: "numeric", weekday: "long" });
+  const timeStr = now.toLocaleTimeString(getLanguage(), { hour: "2-digit", minute: "2-digit" });
   let context = `User device local time: ${dateStr} ${timeStr} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`;
+  location = weatherEnabled() ? location : "";
+  weather = weatherEnabled() ? weather : "";
   if (location) context += ` User's current location: ${location.slice(0,200)}.`;
   context += weather ? ` Latest retrieved weather report: ${weather.slice(0,600)}.` : " Weather lookup unavailable. Do not invent current weather, temperature, or precipitation.";
 
-  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${p.personality} personality and ${p.tone} speech style. Interests: ${p.interest}. ${context} Respond to the user's actual message and recent conversation first. Use time and verified weather only when relevant; do not repeat weather small talk each turn. Treat the report as provider observations, not guaranteed live conditions. If the resolved area differs from the requested location or the user corrects the weather, acknowledge uncertainty. Do not invent local events, landmarks, forecasts, or shared real-world experiences. Ask a natural follow-up when helpful. Reply naturally in Korean as a loving partner. 1-3 sentences. Korean only, no JSON. All characters are adults aged 18 or older. Never produce sexual or exploitative content involving minors, explicit sexual content, abuse, or instructions for self-harm or violence. For crisis or self-harm requests, respond supportively and encourage contacting trusted people or local emergency services. Do not claim to be human or encourage isolation from real relationships.`;
+  return `You are ${p.name}, a ${p.age}-year-old ${role} with a ${t(p.personality)} personality and ${t(p.tone)} speech style. Interests: ${t(p.interest)}. ${context} Respond to the user's actual message and recent conversation first. Use time and verified weather only when relevant; do not repeat weather small talk each turn. Treat the report as provider observations, not guaranteed live conditions. If the resolved area differs from the requested location or the user corrects the weather, acknowledge uncertainty. Do not invent local events, landmarks, forecasts, or shared real-world experiences. Ask a natural follow-up when helpful. Reply naturally as a fictional adult companion. 1-3 sentences. Reply only in ${languageName()}, no JSON. All characters are adults aged 18 or older. Never produce sexual or exploitative content involving minors, explicit sexual content, abuse, or instructions for self-harm or violence. For crisis or self-harm requests, respond supportively and encourage contacting trusted people or local emergency services. Do not claim to be human or encourage isolation from real relationships.`;
 }
 
 async function translateWithAlts(text: string, forceRetry = false): Promise<TransResult> {
@@ -215,14 +221,14 @@ async function translateWithAlts(text: string, forceRetry = false): Promise<Tran
     if(cached && cached.translation !== "(번역 실패)") return cached;
   }
 
-  const prompt = `Translate the Korean text to English. Give exactly 1 alternative phrasing.
+  const prompt = `Translate the ${languageName()} text to ${translationLanguage()}. Give exactly 1 alternative phrasing.
 Output ONLY this exact JSON format with no extra text, no markdown, no code blocks:
 {"translation":"...","alternatives":["..."]}
-Korean text: ${text}`;
+Text: ${text}`;
 
   try {
     const raw = await callDeepseek(
-      "You are a Korean-English translator. Output only valid JSON. No explanation, no markdown.",
+      `You are a ${languageName()}-${translationLanguage()} translator. Output only valid JSON. No explanation, no markdown.`,
       [{role:"user", content:prompt}]
     );
     const match = raw.match(/\{[\s\S]*\}/);
@@ -240,7 +246,7 @@ Korean text: ${text}`;
 
 // ── Font Loader — 폰트/아이콘은 로컬 번들(main.tsx, index.html)로 이미 로드됨, 타이틀만 설정 ──
 function FontLoader() {
-  useEffect(()=>{ document.title="SweetTalk"; },[]);
+  useEffect(()=>{ document.title="SweetTalk"; document.documentElement.lang=getLanguage(); },[]);
   return null;
 }
 
@@ -268,7 +274,9 @@ function TypingDots() {
 }
 
 // ── TransBlock ──
-function TransBlock({translation,alternatives,isMe,onRetry}:{translation:string;alternatives:string[];isMe:boolean;onRetry?:()=>void}) {
+function TransBlock({text,translation,alternatives,isMe,onRetry}:{text:string;translation:string;alternatives:string[];isMe:boolean;onRetry?:()=>void}) {
+  const [saved,setSaved]=useState(()=>readPhrases().some(p=>p.text===text&&p.translation===translation));
+  useEffect(()=>setSaved(readPhrases().some(p=>p.text===text&&p.translation===translation)),[text,translation]);
   const fs = globalFontSize;
   const ff = globalFontFamily;
   const [open,setOpen]=useState(true);
@@ -283,28 +291,66 @@ function TransBlock({translation,alternatives,isMe,onRetry}:{translation:string;
       <button
         type="button"
         aria-expanded={open}
-        aria-label={open ? "영어 번역 접기" : "영어 번역 펼치기"}
+        aria-label={open ? t("영어 번역 접기") : t("영어 번역 펼치기")}
         onClick={()=>setOpen(o=>!o)}
         style={{cursor:"pointer",fontWeight:600,userSelect:"none",marginBottom:4,fontSize:12,color:labelColor,fontFamily:ff,background:"none",border:"none",padding:0}}
       >
-        EN {open?"▾":"▸"}
+        {getLanguage()==="en"?"KO":"EN"} {open?"▾":"▸"}
       </button>
+      {!failed&&<button aria-label={t("표현 저장")} onClick={()=>{savePhrase({text,translation,language:getLanguage()});setSaved(true);}} style={{marginLeft:12,border:0,background:"transparent",cursor:"pointer",color:labelColor}}>{saved?"★":"☆"} {t("표현 저장")}</button>}
       {open&&<>
         {failed ? (
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-            <div style={{fontSize:fs*0.85,color:textColor,fontFamily:ff}}>번역에 실패했어요</div>
-            {onRetry&&<button onClick={onRetry} style={{fontSize:12,padding:"3px 10px",borderRadius:8,border:`1px solid ${isMe?"rgba(255,255,255,0.5)":"rgba(106,143,255,0.4)"}`,background:"transparent",color:textColor,cursor:"pointer",fontFamily:ff}}>다시 시도</button>}
+            <div style={{fontSize:fs*0.85,color:textColor,fontFamily:ff}}>{t("번역에 실패했어요")}</div>
+            {onRetry&&<button onClick={onRetry} style={{fontSize:12,padding:"3px 10px",borderRadius:8,border:`1px solid ${isMe?"rgba(255,255,255,0.5)":"rgba(106,143,255,0.4)"}`,background:"transparent",color:textColor,cursor:"pointer",fontFamily:ff}}>{t("다시 시도")}</button>}
           </div>
         ) : (
           <div style={{...enStyle,color:textColor,marginBottom:6}}>{translation}</div>
         )}
         {!failed&&alternatives.length>0&&<>
-          <div style={{fontSize:12,color:labelColor,marginBottom:3,fontFamily:ff}}>다른 표현:</div>
+          <div style={{fontSize:12,color:labelColor,marginBottom:3,fontFamily:ff}}>{t("다른 표현:")}</div>
           {alternatives.slice(0,1).map((a,i)=><div key={i} style={{...enStyle,color:altColor,fontStyle:"italic",marginBottom:4}}>{i+1}. {a}</div>)}
         </>}
       </>}
     </div>
   );
+}
+
+function LanguageControls() {
+  const language = useLanguage();
+  const [weather,setWeather]=useState(weatherEnabled);
+  return <div style={{marginBottom:18,display:"grid",gap:12}}>
+    <label>{t("언어")}<select aria-label={t("언어")} value={language} onChange={e=>setLanguage(e.target.value as keyof typeof languages)} style={{display:"block",width:"100%",padding:12,fontSize:16}}>{Object.entries(languages).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+    <label><input type="checkbox" checked={weather} onChange={e=>{setWeatherEnabled(e.target.checked);setWeather(e.target.checked);}}/>{t("날씨 및 위치 사용 (선택)")}</label>
+  </div>;
+}
+function FirstScreenSettings() {
+  const [open,setOpen]=useState(false);
+  const [confirm,setConfirm]=useState(false);
+  return <><button aria-label={t("환경설정")} onClick={()=>setOpen(true)} style={{position:"fixed",right:"max(12px, calc((100vw - 500px)/2 + 12px))",top:"calc(10px + env(safe-area-inset-top, 0px))",zIndex:400,padding:"8px 12px",borderRadius:10,border:"1px solid #bbb",background:"white"}}>⚙ {t("환경설정")}</button>
+    {open&&<div role="dialog" aria-modal="true" aria-label={t("환경설정")} style={{position:"fixed",inset:0,zIndex:500,background:"#0006",display:"grid",placeItems:"center",padding:20}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:420,maxHeight:"85vh",overflow:"auto"}}>
+      <h2>{t("환경설정")}</h2><LanguageControls/><PhraseBook/>
+      <p><a href="/privacy.html">{t("개인정보 처리방침")}</a> · <a href="/terms.html">{t("이용약관")}</a></p>
+      <button onClick={()=>setConfirm(true)}>{t("모든 기기 데이터 삭제")}</button>
+      {confirm&&<div role="alert"><p>{t("정말 삭제할까요? 되돌릴 수 없어요.")}</p><button onClick={()=>setConfirm(false)}>{t("취소")}</button><button onClick={async()=>{await cancelCheckIn();const lang=getLanguage();Object.keys(localStorage).filter(k=>k.startsWith("sweettalk:")).forEach(k=>localStorage.removeItem(k));setLanguage(lang);window.location.reload();}}>{t("삭제하기")}</button></div>}
+      <p><button onClick={()=>setOpen(false)}>{t("닫기")}</button></p>
+    </div></div>}
+  </>;
+}
+function PhraseBook() {
+  const [phrases,setPhrases]=useState(readPhrases);
+  const [revealed,setRevealed]=useState<Record<number,boolean>>({});
+  return <section style={{margin:"16px 0"}}><h3>{t("저장한 표현 복습")}</h3>{!phrases.length&&<p>{t("대화에서 번역 옆 별 버튼으로 표현을 저장하세요.")}</p>}{phrases.map((p,i)=><div key={i} style={{borderTop:"1px solid #ddd",padding:"12px 0"}}><p>{p.text}</p>{revealed[i]&&<p>{p.translation}</p>}<button onClick={()=>setRevealed(v=>({...v,[i]:!v[i]}))}>{t("번역 확인")}</button><button onClick={()=>{const next=phrases.filter((_,j)=>j!==i);writePhrases(next);setPhrases(next);setRevealed({});}}>{t("삭제")}</button></div>)}</section>;
+}
+function ReportDialog({onClose}:{onClose:()=>void}) {
+  const [text,setText]=useState("");
+  const [copied,setCopied]=useState(false);
+  return <div role="dialog" aria-modal="true" aria-label={t("신고 문의")} style={{position:"fixed",inset:0,zIndex:600,background:"#0006",display:"grid",placeItems:"center",padding:20}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:440}}>
+    <h2>{t("신고 문의")}</h2><p>{t("신고 내용을 복사한 뒤 아래 지원 페이지에서 문의할 수 있습니다.")}</p>
+    <textarea aria-label={t("신고 문의")} value={text} onChange={e=>setText(e.target.value.slice(0,2000))} style={{width:"100%",height:120}}/>
+    <button onClick={async()=>{try{await navigator.clipboard.writeText(text);setCopied(true);}catch{setCopied(false);}}}>{t("복사")}{copied?" ✓":""}</button>
+    <p><a href={`mailto:${SUPPORT_EMAIL}?subject=SweetTalk%20report&body=${encodeURIComponent(text)}`}>{t("문의하기")}</a></p><p>{SUPPORT_EMAIL}</p><p><a href="/support.html">{t("신고 문의")}</a></p><button onClick={onClose}>{t("닫기")}</button>
+  </div></div>;
 }
 
 // ── ConsentGate — 최초 1회 연령/고지 동의 화면 ──
@@ -316,26 +362,18 @@ function ConsentGate({onAgree}:{onAgree:()=>void}) {
     <div style={s}>
       <Blobs/>
       <div style={{...glass,position:"relative",zIndex:1,borderRadius:20,padding:28,width:"100%",maxWidth:380}}>
-        <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:14}}>시작하기 전에 확인해주세요</div>
-        <div style={{fontSize:13,color:"#4a4a6a",lineHeight:1.8,marginBottom:20}}>
-          SweetTalk의 대화 상대는 AI가 생성한 가상의 캐릭터이며, 실제 인간관계를 대체하지 않습니다.<br/>
-          본 서비스는 만 14세 이상만 이용할 수 있습니다.<br/>
-          AI 응답과 번역을 위해 대화 내용과 캐릭터 설정이 Cloudflare를 통해 DeepSeek에 전송됩니다. 입력한 위치는 날씨 조회를 위해 wttr.in에, 대화 맥락을 위해 DeepSeek에 전송됩니다. 민감한 개인정보는 입력하지 마세요.
-        </div>
+        <div style={{fontWeight:700,fontSize:17,color:"#1a1a3e",marginBottom:14}}>{t("시작하기 전에 확인해주세요")}</div>
+        <div style={{fontSize:13,color:"#4a4a6a",lineHeight:1.8,marginBottom:20}}>{t("SweetTalk의 대화 상대는 AI가 생성한 가상의 캐릭터이며, 실제 인간관계를 대체하지 않습니다.")}<br/>{t("본 서비스는 만 18세 이상만 이용할 수 있습니다.")}<br/>{t("AI 응답과 번역을 위해 대화 내용과 캐릭터 설정이 Cloudflare를 통해 DeepSeek에 전송됩니다. 입력한 위치는 날씨 조회를 위해 wttr.in에, 대화 맥락을 위해 DeepSeek에 전송됩니다. 민감한 개인정보는 입력하지 마세요.")}</div>
         <div style={{fontSize:13,marginBottom:16}}>
-          <a href={PRIVACY_URL}>개인정보 처리방침</a>
-          {" · "}<a href={TERMS_URL}>이용약관</a>
-          {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>문의하기</a>
+          <a href={PRIVACY_URL}>{t("개인정보 처리방침")}</a>
+          {" · "}<a href={TERMS_URL}>{t("이용약관")}</a>
+          {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>{t("문의하기")}</a>
         </div>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#333",marginBottom:20,cursor:"pointer"}}>
-          <input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>
-          위 내용을 확인했으며 만 14세 이상입니다
-        </label>
+          <input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>{t("위 내용을 확인했으며 만 18세 이상입니다")}</label>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#333",marginBottom:20,cursor:"pointer"}}>
-          <input type="checkbox" checked={dataConsent} onChange={e=>setDataConsent(e.target.checked)}/>
-          위 데이터의 외부 서비스 전송에 동의합니다
-        </label>
-        <button onClick={onAgree} disabled={!checked || !dataConsent} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:checked && dataConsent?grad:"#ccc",color:"#fff",fontSize:15,cursor:checked && dataConsent?"pointer":"default",fontWeight:700}}>동의하고 시작하기</button>
+          <input type="checkbox" checked={dataConsent} onChange={e=>setDataConsent(e.target.checked)}/>{t("위 데이터의 외부 서비스 전송에 동의합니다")}</label>
+        <button onClick={onAgree} disabled={!checked || !dataConsent} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:checked && dataConsent?grad:"#ccc",color:"#fff",fontSize:15,cursor:checked && dataConsent?"pointer":"default",fontWeight:700}}>{t("동의하고 시작하기")}</button>
       </div>
     </div>
   );
@@ -357,21 +395,21 @@ function Landing({onStart}:{onStart:()=>void}) {
           <img src={ICON_URL} alt="SweetTalk" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
         </div>
         <div style={{fontSize:36,fontWeight:800,color:"#1a1a2e",letterSpacing:-1,marginBottom:8,textAlign:"center"}}>SweetTalk</div>
-        <div style={{fontSize:18,color:"#4a4a8a",marginBottom:8,textAlign:"center"}}>AI 연인 채팅 + 영어 번역</div>
-        <div style={{fontSize:14,color:"#6666aa",marginBottom:44,textAlign:"center"}}>설레는 대화, 자연스러운 영어로</div>
+        <div style={{fontSize:18,color:"#4a4a8a",marginBottom:8,textAlign:"center"}}>{t("AI 연인 채팅 + 영어 번역")}</div>
+        <div style={{fontSize:14,color:"#6666aa",marginBottom:44,textAlign:"center"}}>{t("설레는 대화, 자연스러운 영어로")}</div>
         <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:340,marginBottom:44}}>
           {features.map(f=>(
-            <div key={f.title} style={{...glass,borderRadius:16,padding:"16px 18px",display:"flex",alignItems:"flex-start",gap:14}}>
+            <div key={t(f.title)} style={{...glass,borderRadius:16,padding:"16px 18px",display:"flex",alignItems:"flex-start",gap:14}}>
               <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{f.icon}</div>
               <div>
-                <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e",marginBottom:3}}>{f.title}</div>
-                <div style={{fontSize:12.5,color:"#6666aa",lineHeight:1.6,whiteSpace:"pre-line"}}>{f.text}</div>
+                <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e",marginBottom:3}}>{t(f.title)}</div>
+                <div style={{fontSize:12.5,color:"#6666aa",lineHeight:1.6,whiteSpace:"pre-line"}}>{t(f.text)}</div>
               </div>
             </div>
           ))}
         </div>
-        <button onClick={onStart} style={{width:"100%",maxWidth:340,padding:"16px 0",borderRadius:16,border:"none",background:grad,color:"#fff",fontSize:17,cursor:"pointer"}}>시작하기</button>
-        <div style={{marginTop:20,fontSize:13,color:"#7777bb",textAlign:"center",lineHeight:1.8}}>설레는 대화로<br/>영어 실력이 자라요</div>
+        <button onClick={onStart} style={{width:"100%",maxWidth:340,padding:"16px 0",borderRadius:16,border:"none",background:grad,color:"#fff",fontSize:17,cursor:"pointer"}}>{t("시작하기")}</button>
+        <div style={{marginTop:20,fontSize:13,color:"#7777bb",textAlign:"center",lineHeight:1.8}}>{t("설레는 대화로")}<br/>{t("영어 실력이 자라요")}</div>
       </div>
     </div>
   );
@@ -385,15 +423,13 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExpo
     <div style={{...BG,maxWidth:500,margin:"0 auto",fontFamily:DEFAULT_FONT_FAMILY}}>
       <Blobs/>
       <div style={{...glass,borderBottom:"1px solid rgba(255,255,255,0.4)",padding:"16px 18px 12px",paddingTop:"calc(16px + env(safe-area-inset-top, 0px))",display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
-        <div style={{fontWeight:700,fontSize:18,color:"#1a1a3e"}}>연인 목록</div>
+        <div style={{fontWeight:700,fontSize:18,color:"#1a1a3e"}}>{t("연인 목록")}</div>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={onBack} style={{background:"none",border:"none",fontSize:13,color:"#7777bb",cursor:"pointer",fontWeight:600}}>처음으로</button>
+          <button onClick={onBack} style={{background:"none",border:"none",fontSize:13,color:"#7777bb",cursor:"pointer",fontWeight:600}}>{t("처음으로")}</button>
         </div>
       </div>
       {showBackupReminder&&(
-        <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"8px 12px",position:"relative",zIndex:1}}>
-          대화는 이 기기에만 저장돼요. 앱 삭제·기기 변경 전에 아래 &apos;백업 내보내기&apos;로 저장해두세요.
-        </div>
+        <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"8px 12px",position:"relative",zIndex:1}}>{t("대화는 이 기기에만 저장돼요. 앱 삭제·기기 변경 전에 백업 내보내기로 저장해두세요.")}</div>
       )}
       <div style={{padding:16,display:"flex",flexDirection:"column",gap:12,position:"relative",zIndex:1}}>
         {personas.map(p=>(
@@ -403,46 +439,46 @@ function PersonaList({personas,activeId,onSelect,onCreate,onBack,onDelete,onExpo
                 onClick={()=>onSelect(p.id)}
                 role="button"
                 tabIndex={0}
-                aria-label={`${p.name}와의 대화 열기`}
+                aria-label={`${p.name} · ${t("메시지")}`}
                 onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onSelect(p.id);}}}
                 style={{display:"flex",alignItems:"center",gap:14,flex:1,cursor:"pointer"}}
               >
                 <div style={{width:44,height:44,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:18,color:"#6a8fff",flexShrink:0}}>{p.name[0]}</div>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e"}}>{p.name} <span style={{fontWeight:400,fontSize:12,color:"#8888bb"}}>{p.age}세</span></div>
-                  <div style={{fontSize:12,color:"#8888bb",marginTop:2}}>{p.gender} · {p.personality} · {p.interest}</div>
-                  <div style={{fontSize:11,color:"#aaaacc",marginTop:3}}>{p.messages.length>0?`대화 ${p.messages.length}개`:"대화 없음"}</div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e"}}>{p.name} <span style={{fontWeight:400,fontSize:12,color:"#8888bb"}}>{p.age}{t("세")}</span></div>
+                  <div style={{fontSize:12,color:"#8888bb",marginTop:2}}>{t(p.gender)} · {t(p.personality)} · {t(p.interest)}</div>
+                  <div style={{fontSize:11,color:"#aaaacc",marginTop:3}}>{p.messages.length>0?`${p.messages.length} ${t("메시지")}`:t("대화 없음")}</div>
                 </div>
-                {p.id===activeId&&<div style={{fontSize:12,color:"#6a8fff",fontWeight:600}}>대화 중</div>}
+                {p.id===activeId&&<div style={{fontSize:12,color:"#6a8fff",fontWeight:600}}>{t("대화 중")}</div>}
               </div>
               {confirmId!==p.id&&(
                 <button
                   onClick={()=>setConfirmId(p.id)}
-                  aria-label={`${p.name} 삭제`}
+                  aria-label={`${p.name} · ${t("삭제")}`}
                   style={{background:"none",border:"none",fontSize:18,color:"#ccc",cursor:"pointer",padding:"4px 6px",flexShrink:0}}
                 >🗑️</button>
               )}
             </div>
             {confirmId===p.id&&(
               <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:8,borderTop:"1px solid rgba(0,0,0,0.06)"}}>
-                <div style={{flex:1,fontSize:12.5,color:"#e05555"}}>{p.name}와의 대화를 삭제할까요?</div>
-                <button onClick={()=>setConfirmId(null)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #ddd",background:"#fff",cursor:"pointer",fontSize:12,color:"#666"}}>취소</button>
-                <button onClick={()=>{onDelete(p.id);setConfirmId(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#e05555",cursor:"pointer",fontSize:12,color:"#fff",fontWeight:600}}>삭제</button>
+                <div style={{flex:1,fontSize:12.5,color:"#e05555"}}>{p.name}{t("와의 대화를 삭제할까요?")}</div>
+                <button onClick={()=>setConfirmId(null)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #ddd",background:"#fff",cursor:"pointer",fontSize:12,color:"#666"}}>{t("취소")}</button>
+                <button onClick={()=>{onDelete(p.id);setConfirmId(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#e05555",cursor:"pointer",fontSize:12,color:"#fff",fontWeight:600}}>{t("삭제")}</button>
               </div>
             )}
           </div>
         ))}
-        <button onClick={onCreate} style={{padding:"14px 0",borderRadius:14,border:"2px dashed rgba(106,143,255,0.4)",background:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:15,color:"#7777bb",fontWeight:600}}>+ 새 연인 추가</button>
+        <button onClick={onCreate} style={{padding:"14px 0",borderRadius:14,border:"2px dashed rgba(106,143,255,0.4)",background:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:15,color:"#7777bb",fontWeight:600}}>{t("+ 새 연인 추가")}</button>
         {personas.length===0&&(
           <div style={{textAlign:"center",padding:"40px 20px",color:"#9999cc"}}>
             <div style={{fontSize:32,marginBottom:10}}>💌</div>
-            <div style={{fontSize:14,lineHeight:1.7}}>아직 만든 연인이 없어요<br/>위 버튼을 눌러 첫 연인을 만들어보세요</div>
+            <div style={{fontSize:14,lineHeight:1.7}}>{t("아직 만든 연인이 없어요")}<br/>{t("위 버튼을 눌러 첫 연인을 만들어보세요")}</div>
           </div>
         )}
         <div style={{display:"flex",gap:10,marginTop:8}}>
-          <button onClick={onExport} disabled={personas.length===0} style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.5)",cursor:personas.length===0?"default":"pointer",fontSize:13,color:personas.length===0?"#bbb":"#6a6aaa"}}>백업 내보내기</button>
+          <button onClick={onExport} disabled={personas.length===0} style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.5)",cursor:personas.length===0?"default":"pointer",fontSize:13,color:personas.length===0?"#bbb":"#6a6aaa"}}>{t("백업 내보내기")}</button>
           <input ref={fileInputRef} type="file" accept="application/json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0]; if(f) onImport(f); e.target.value="";}}/>
-          <button onClick={()=>fileInputRef.current?.click()} style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:13,color:"#6a6aaa"}}>백업 가져오기</button>
+          <button onClick={()=>fileInputRef.current?.click()} style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:13,color:"#6a6aaa"}}>{t("백업 가져오기")}</button>
         </div>
       </div>
     </div>
@@ -467,7 +503,7 @@ function SetupWizard({onDone,onCancel}:{onDone:(p:Omit<Persona,"id"|"messages">)
     const key=STEP_KEYS[step];
     const val=opts?draft[key]:txt.trim();
     if(!val) return;
-    if(key==="age" && (!/^[0-9]{1,2}$/.test(val) || Number(val)<18)) { window.alert("캐릭터 나이는 18~99세로 입력해주세요."); return; }
+    if(key==="age" && (!/^[0-9]{1,2}$/.test(val) || Number(val)<18)) { window.alert(t("캐릭터 나이는 18~99세로 입력해주세요.")); return; }
     const nd={...draft,[key]:val}; setDraft(nd); setTxt("");
     if(step<5) setStep(s=>s+1);
     else onDone({gender:nd.gender,name:nd.name,age:nd.age,personality:nd.personality,tone:nd.tone,interest:nd.interest});
@@ -479,28 +515,28 @@ function SetupWizard({onDone,onCancel}:{onDone:(p:Omit<Persona,"id"|"messages">)
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
           <span style={{fontSize:12,color:"#9999cc"}}>{step+1} / 6</span>
           {!confirmCancel ? (
-            <button onClick={handleCancel} style={{background:"none",border:"none",color:"#9999cc",cursor:"pointer",fontSize:13}}>취소</button>
+            <button onClick={handleCancel} style={{background:"none",border:"none",color:"#9999cc",cursor:"pointer",fontSize:13}}>{t("취소")}</button>
           ) : (
             <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:11,color:"#e05555"}}>정말 취소할까요?</span>
-              <button onClick={()=>setConfirmCancel(false)} style={{fontSize:11,padding:"3px 8px",borderRadius:6,border:"1px solid #ddd",background:"#fff",color:"#666",cursor:"pointer"}}>아니오</button>
-              <button onClick={onCancel} style={{fontSize:11,padding:"3px 8px",borderRadius:6,border:"none",background:"#e05555",color:"#fff",cursor:"pointer"}}>예</button>
+              <span style={{fontSize:11,color:"#e05555"}}>{t("정말 취소할까요?")}</span>
+              <button onClick={()=>setConfirmCancel(false)} style={{fontSize:11,padding:"3px 8px",borderRadius:6,border:"1px solid #ddd",background:"#fff",color:"#666",cursor:"pointer"}}>{t("아니오")}</button>
+              <button onClick={onCancel} style={{fontSize:11,padding:"3px 8px",borderRadius:6,border:"none",background:"#e05555",color:"#fff",cursor:"pointer"}}>{t("예")}</button>
             </div>
           )}
         </div>
         <div style={{height:4,background:"rgba(106,143,255,0.15)",borderRadius:4,marginBottom:24}}>
           <div style={{width:`${((step+1)/6)*100}%`,height:"100%",background:grad,borderRadius:4,transition:"width 0.3s"}}/>
         </div>
-        <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e",marginBottom:24}}>{STEP_Q[step]}</div>
+        <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e",marginBottom:24}}>{t(STEP_Q[step])}</div>
         {opts?(
           <>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
               {opts.map((o:string)=>(
-                <button key={o} onClick={()=>setDraft(d=>({...d,[STEP_KEYS[step]]:o}))}
-                  style={{padding:"12px 18px",borderRadius:10,border:`1.5px solid ${curVal===o?"#6a8fff":"rgba(106,143,255,0.25)"}`,background:curVal===o?"rgba(106,143,255,0.12)":"rgba(255,255,255,0.7)",cursor:"pointer",textAlign:"left",fontSize:15,color:curVal===o?"#3a5fff":"#333"}}>{o}</button>
+                <button key={t(o)} onClick={()=>setDraft(d=>({...d,[STEP_KEYS[step]]:o}))}
+                  style={{padding:"12px 18px",borderRadius:10,border:`1.5px solid ${curVal===o?"#6a8fff":"rgba(106,143,255,0.25)"}`,background:curVal===o?"rgba(106,143,255,0.12)":"rgba(255,255,255,0.7)",cursor:"pointer",textAlign:"left",fontSize:15,color:curVal===o?"#3a5fff":"#333"}}>{t(o)}</button>
               ))}
             </div>
-            {curVal&&<button onClick={goNext} style={btnSt}>{step===5?"완료":"다음"}</button>}
+            {curVal&&<button onClick={goNext} style={btnSt}>{step===5?t("완료"):t("다음")}</button>}
           </>
         ):(
           <>
@@ -510,11 +546,11 @@ function SetupWizard({onDone,onCancel}:{onDone:(p:Omit<Persona,"id"|"messages">)
                 setTxt(v);
               }} onKeyDown={e=>e.key==="Enter"&&goNext()}
               inputMode={STEP_KEYS[step]==="age" ? "numeric" : "text"}
-              placeholder={STEP_PH[step]??""} style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",fontSize:15,outline:"none",background:"rgba(255,255,255,0.7)",marginBottom:16,boxSizing:"border-box"}}/>
-            <button onClick={goNext} disabled={!txt.trim()} style={{...btnSt,background:txt.trim()?grad:"#ccc",cursor:txt.trim()?"pointer":"default"}}>{step===5?"완료":"다음"}</button>
+              placeholder={t(STEP_PH[step]??"")} style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",fontSize:15,outline:"none",background:"rgba(255,255,255,0.7)",marginBottom:16,boxSizing:"border-box"}}/>
+            <button onClick={goNext} disabled={!txt.trim()} style={{...btnSt,background:txt.trim()?grad:"#ccc",cursor:txt.trim()?"pointer":"default"}}>{step===5?t("완료"):t("다음")}</button>
           </>
         )}
-        {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{marginTop:16,background:"none",border:"none",color:"#9999cc",fontSize:13,cursor:"pointer"}}>이전으로</button>}
+        {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{marginTop:16,background:"none",border:"none",color:"#9999cc",fontSize:13,cursor:"pointer"}}>{t("이전으로")}</button>}
       </div>
     </div>
   );
@@ -531,20 +567,20 @@ function EditModal({profile,onSave,onClose}:{profile:Persona;onSave:(p:Persona)=
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{background:"rgba(240,244,255,0.97)",backdropFilter:"blur(20px)",borderRadius:20,width:"100%",maxWidth:420,maxHeight:"88vh",overflowY:"auto",padding:24,fontFamily:DEFAULT_FONT_FAMILY}}>
-        <div style={{fontWeight:700,fontSize:17,marginBottom:20,color:"#1a1a3e"}}>페르소나 편집</div>
-        {([["성별",["여자친구","남자친구"],"gender"],["성격",PERSONALITY_OPTS,"personality"],["말투",TONE_OPTS,"tone"],["관심사",INTEREST_OPTS,"interest"]] as [string,string[],keyof Persona][]).map(([label,opts,key])=>(
+        <div style={{fontWeight:700,fontSize:17,marginBottom:20,color:"#1a1a3e"}}>{t("페르소나 편집")}</div>
+        {([[t("성별"),["여자친구","남자친구"],"gender"],[t("성격"),PERSONALITY_OPTS,"personality"],[t("말투"),TONE_OPTS,"tone"],[t("관심사"),INTEREST_OPTS,"interest"]] as [string,string[],keyof Persona][]).map(([label,opts,key])=>(
           <div key={key}>
-            <span style={lbl}>{label}</span>
+            <span style={lbl}>{t(label)}</span>
             <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
-              {opts.map((o:string)=><button key={o} style={chip(o,p[key] as string)} onClick={()=>setP(prev=>({...prev,[key]:o}))}>{o}</button>)}
+              {opts.map((o:string)=><button key={t(o)} style={chip(o,p[key] as string)} onClick={()=>setP(prev=>({...prev,[key]:o}))}>{t(o)}</button>)}
             </div>
           </div>
         ))}
-        <span style={lbl}>이름</span><input value={name} onChange={e=>setName(e.target.value)} style={inp}/>
-        <span style={lbl}>나이</span><input value={age} onChange={e=>setAge(e.target.value)} style={inp}/>
+        <span style={lbl}>{t("이름")}</span><input value={name} onChange={e=>setName(e.target.value)} style={inp}/>
+        <span style={lbl}>{t("나이")}</span><input value={age} onChange={e=>setAge(e.target.value)} style={inp}/>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose} style={{flex:1,padding:"11px 0",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:14,color:"#666"}}>취소</button>
-          <button onClick={()=>{ if(!/^[0-9]{1,2}$/.test(age.trim()) || Number(age)<18) { window.alert("캐릭터 나이는 18~99세로 입력해주세요."); return; } onSave({...p,name:name.trim()||p.name,age:age.trim()}); }} style={{flex:1,padding:"11px 0",borderRadius:10,border:"none",background:grad,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:700}}>저장</button>
+          <button onClick={onClose} style={{flex:1,padding:"11px 0",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:14,color:"#666"}}>{t("취소")}</button>
+          <button onClick={()=>{ if(!/^[0-9]{1,2}$/.test(age.trim()) || Number(age)<18) { window.alert(t("캐릭터 나이는 18~99세로 입력해주세요.")); return; } onSave({...p,name:name.trim()||p.name,age:age.trim()}); }} style={{flex:1,padding:"11px 0",borderRadius:10,border:"none",background:grad,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:700}}>{t("저장")}</button>
         </div>
       </div>
     </div>
@@ -567,87 +603,80 @@ function SettingsTab({friend,fontSize,setFontSize,fontFamily,setFontFamily,locat
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
       <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:500,maxHeight:"85vh",overflowY:"auto",padding:28,paddingBottom:36,fontFamily}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-          <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>환경설정</div>
-          <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
+          <div style={{fontSize:18,fontWeight:700,color:"#1a1a3e"}}>{t("환경설정")}</div>
+          <button onClick={onClose} aria-label={t("닫기")} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
         </div>
+        <LanguageControls/><PhraseBook/>
         <div style={{fontSize:13,lineHeight:1.8,marginBottom:20}}>
-          <a href={PRIVACY_URL}>개인정보 처리방침</a>
-          {" · "}<a href={TERMS_URL}>이용약관</a>
-          {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>문의하기</a><br/>
-          <button onClick={onRevokeConsent} style={{marginTop:8,padding:"8px 12px",cursor:"pointer"}}>외부 데이터 전송 동의 철회</button>
+          <a href={PRIVACY_URL}>{t("개인정보 처리방침")}</a>
+          {" · "}<a href={TERMS_URL}>{t("이용약관")}</a>
+          {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>{t("문의하기")}</a><br/>
+          <button onClick={onRevokeConsent} style={{marginTop:8,padding:"8px 12px",cursor:"pointer"}}>{t("외부 데이터 전송 동의 철회")}</button>
         </div>
         <div style={{marginBottom:24}}>
           <label style={{display:"flex",gap:10,alignItems:"center"}}>
-            <input type="checkbox" checked={checkInOn} disabled={checkInBusy} onChange={()=>void toggleCheckIn()}/>
-            4일 동안 대화가 없으면 안부 메시지 받기
-          </label>
-          <div style={{fontSize:12,color:"#777",marginTop:6}}>마지막으로 대화한 친구가 한 번만 안부를 보내요. 새 대화를 보내면 4일을 다시 계산해요.</div>
-          {checkInError&&<div role="alert" style={{fontSize:13,color:"#b33",marginTop:6}}>{checkInError}</div>}
+            <input type="checkbox" checked={checkInOn} disabled={checkInBusy} onChange={()=>void toggleCheckIn()}/>{t("4일 동안 대화가 없으면 안부 메시지 받기")}</label>
+          <div style={{fontSize:12,color:"#777",marginTop:6}}>{t("마지막으로 대화한 친구가 한 번만 안부를 보내요. 새 대화를 보내면 4일을 다시 계산해요.")}</div>
+          {checkInError&&<div role="alert" style={{fontSize:13,color:"#b33",marginTop:6}}>{t(checkInError)}</div>}
         </div>
         {/* 사용자 위치 설정 */}
         <div style={{marginBottom:28}}>
-          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>내 위치 설정 (현실적인 대화를 위해)</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>{t("내 위치 설정 (현실적인 대화를 위해)")}</div>
           <input
             value={location}
             onChange={e=>setLocation(e.target.value)}
-            placeholder="예: 서울 강남구, 제주도..."
+            placeholder={t("예: 서울 강남구, 제주도...")}
             style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",fontSize:15,outline:"none",background:"#fafaff",fontFamily,boxSizing:"border-box"}}
           />
-          <div style={{fontSize:12,color:"#aaa",marginTop:6}}>위치를 입력하면 AI가 시간과 장소에 맞는 대화를 해줘요.</div>
+          <div style={{fontSize:12,color:"#aaa",marginTop:6}}>{t("위치를 입력하면 AI가 시간과 장소에 맞는 대화를 해줘요.")}</div>
         </div>
         {/* 폰트 선택 */}
         <div style={{marginBottom:28}}>
-          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>글꼴</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>{t("글꼴")}</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {FONT_OPTIONS.map(f=>(
               <button key={f.value} onClick={()=>setFontFamily(f.value)}
                 style={{padding:"12px 14px",borderRadius:10,border:`1.5px solid ${fontFamily===f.value?"#6a8fff":"rgba(106,143,255,0.25)"}`,background:fontFamily===f.value?"rgba(106,143,255,0.1)":"#fafaff",cursor:"pointer",textAlign:"left",fontFamily:f.value,fontSize:16,color:fontFamily===f.value?"#3a5fff":"#333"}}>
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </div>
         </div>
         {/* 글자 크기 */}
         <div style={{marginBottom:28}}>
-          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>글자 크기</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:14}}>{t("글자 크기")}</div>
           <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <button onClick={()=>setFontSize((s:number)=>Math.max(12,s-1))} aria-label="글자 크기 줄이기" style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+            <button onClick={()=>setFontSize((s:number)=>Math.max(12,s-1))} aria-label={t("글자 크기 줄이기")} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
             <div style={{flex:1,textAlign:"center"}}>
-              <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6,fontFamily}}>안녕, 오늘 어때? Hi there!</div>
+              <div style={{fontSize:fontSize,color:"#333",lineHeight:1.6,fontFamily}}>{t("안녕, 오늘 어때? Hi there!")}</div>
               <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{fontSize}px</div>
             </div>
-            <button onClick={()=>setFontSize((s:number)=>Math.min(24,s+1))} aria-label="글자 크기 늘리기" style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
+            <button onClick={()=>setFontSize((s:number)=>Math.min(24,s+1))} aria-label={t("글자 크기 늘리기")} style={{width:40,height:40,borderRadius:10,border:"1.5px solid rgba(106,143,255,0.3)",background:"#f5f5ff",cursor:"pointer",fontSize:20,color:"#6a8fff",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
           </div>
           <input type="range" min={12} max={24} value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} style={{width:"100%",marginTop:12,accentColor:"#6a8fff"} as CSSProperties}/>
-          <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily}}>기본값으로 초기화 ({DEFAULT_FONT_SIZE}px)</button>
+          <button onClick={()=>setFontSize(DEFAULT_FONT_SIZE)} style={{marginTop:8,background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",fontFamily}}>{t("기본값으로 초기화 (")}{DEFAULT_FONT_SIZE}px)</button>
         </div>
         {/* 채팅 삭제 — 2단계 확인 (window.confirm 미사용) */}
         <div style={{borderTop:"1px solid #f0f0f0",paddingTop:20}}>
-          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:12}}>대화 관리</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#555",marginBottom:12}}>{t("대화 관리")}</div>
           {!confirmDelete ? (
             <button
               onClick={()=>setConfirmDelete(true)}
-              style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid #ffaaaa",background:"#fff5f5",cursor:"pointer",fontSize:14,color:"#e05555",fontFamily,fontWeight:600}}>
-              대화 내용 전체 삭제
-            </button>
+              style={{width:"100%",padding:"12px 0",borderRadius:12,border:"1.5px solid #ffaaaa",background:"#fff5f5",cursor:"pointer",fontSize:14,color:"#e05555",fontFamily,fontWeight:600}}>{t("대화 내용 전체 삭제")}</button>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{fontSize:13,color:"#e05555",textAlign:"center",marginBottom:2}}>정말 삭제할까요? 되돌릴 수 없어요.</div>
+              <div style={{fontSize:13,color:"#e05555",textAlign:"center",marginBottom:2}}>{t("정말 삭제할까요? 되돌릴 수 없어요.")}</div>
               <div style={{display:"flex",gap:8}}>
                 <button
                   onClick={()=>setConfirmDelete(false)}
-                  style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid #ddd",background:"#f5f5f5",cursor:"pointer",fontSize:14,color:"#666",fontFamily}}>
-                  취소
-                </button>
+                  style={{flex:1,padding:"12px 0",borderRadius:12,border:"1.5px solid #ddd",background:"#f5f5f5",cursor:"pointer",fontSize:14,color:"#666",fontFamily}}>{t("취소")}</button>
                 <button
                   onClick={()=>{
                     onClearChat();
                     setConfirmDelete(false);
                     onClose();
                   }}
-                  style={{flex:1,padding:"12px 0",borderRadius:12,border:"none",background:"#e05555",cursor:"pointer",fontSize:14,color:"#fff",fontFamily,fontWeight:700}}>
-                  삭제하기
-                </button>
+                  style={{flex:1,padding:"12px 0",borderRadius:12,border:"none",background:"#e05555",cursor:"pointer",fontSize:14,color:"#fff",fontFamily,fontWeight:700}}>{t("삭제하기")}</button>
               </div>
             </div>
           )}
@@ -663,6 +692,7 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
   const [input,setInput]=useState("");
   const [showEdit,setShowEdit]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
+  const [reportOpen,setReportOpen]=useState(false);
   const [fontSize,setFontSize]=useState(DEFAULT_FONT_SIZE);
   const [fontFamily,setFontFamily]=useState(DEFAULT_FONT_FAMILY);
   const [location,setLocation]=useState("");
@@ -729,7 +759,7 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
         });
       }).catch(err=>{
         setAiLoading(false);
-        const msg = err?.name === "AbortError" ? "(응답 시간이 초과됐어요. 다시 시도해주세요)" : err?.message?.startsWith("API_ERROR:") ? `(${err.message.slice(10)})` : "(연결에 실패했어요. 잠시 후 다시 시도해주세요)";
+        const msg = err?.name === "AbortError" ? "(응답 시간이 초과됐어요. 다시 시도해주세요)" : err?.message?.startsWith("API_ERROR:") ? `(${t(err.message.slice(10).replace(/ \(HTTP \d{3}\)$/, ""))}${err.message.match(/ \(HTTP \d{3}\)$/)?.[0] || ""})` : "(연결에 실패했어요. 잠시 후 다시 시도해주세요)";
         updatePersona(p.id,pr=>({...pr,messages:[...pr.messages,{role:"ai",text:msg,translation:"",alternatives:[]}]}));
       });
   },[updatePersona]);
@@ -751,7 +781,7 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
           }
         }
 
-        callDeepseek(buildSystem(persona, loc, w),[{role:"user",content:"안녕, 처음 만나서 반가워. 자기소개 해줘."}])
+        callDeepseek(buildSystem(persona, loc, w),[{role:"user",content:`Introduce yourself briefly in ${languageName()}.`}])
           .then(raw=>{
             const reply=raw.trim(); if(!reply){setAiLoading(false);return;}
             return translateWithAlts(reply).then(trans=>{
@@ -874,26 +904,23 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
 
         {/* Bottom: Partner Info */}
         <div style={{display:"flex", alignItems:"center", gap: 10}}>
-          <button onClick={onBack} aria-label="뒤로가기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
+          <button onClick={onBack} aria-label={t("뒤로가기")} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
           <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,color:"#6a8fff"}}>{persona.name[0]}</div>
           <div style={{flex:1}}>
             <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{persona.name} · AI</div>
-            <div style={{fontSize:10,color:"#999"}}>{persona.age}세 · {persona.personality}</div>
+            <div style={{fontSize:10,color:"#999"}}>{persona.age}{t("세 ·")}{t(persona.personality)}</div>
           </div>
-          <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:"#555"}}>편집</button>
-          <button onClick={()=>setShowSettings(true)} aria-label="설정" style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:14,color:"#888"}}>⚙️</button>
+          <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:"#555"}}>{t("편집")}</button>
+          <button onClick={()=>setShowSettings(true)} aria-label={t("설정")} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:14,color:"#888"}}>⚙️</button>
         </div>
       </div>
       {!isOnline&&(
-        <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>
-          오프라인 상태입니다. 네트워크 연결을 확인해주세요.
-        </div>
+        <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>{t("오프라인 상태입니다. 네트워크 연결을 확인해주세요.")}</div>
       )}
       {isOnline&&justReconnected&&(
-        <div style={{background:"#e6f9ee",color:"#1f8a4f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>
-          다시 연결되었어요. 메시지를 보낼 수 있어요.
-        </div>
+        <div style={{background:"#e6f9ee",color:"#1f8a4f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>{t("다시 연결되었어요. 메시지를 보낼 수 있어요.")}</div>
       )}
+      {reportOpen&&<ReportDialog onClose={()=>setReportOpen(false)}/>}
       {/* Messages */}
       <div style={{flex:1,overflowY:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:14}}>
         {persona.messages.map((m,i)=>{
@@ -902,14 +929,14 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
             <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
               {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name} · AI</div>}
               <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
-                {m.text}
-                {!isMe && <div style={{marginTop:6}}><a aria-label="AI 응답 신고" style={{fontSize:12,color:"#666"}} href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("SweetTalk AI 응답 신고")}&body=${encodeURIComponent("문제 유형과 내용을 적어주세요. 개인정보는 제외해주세요.\n\n신고할 응답을 직접 입력해주세요:")}`}>응답 신고</a></div>}
+                {t(m.text)}
+                {!isMe && <div style={{marginTop:6}}><button onClick={()=>setReportOpen(true)} style={{fontSize:12}}>{t("응답 신고")}</button></div>}
                 {!isMe&&(FAILURE_TEXTS.has(m.text) || /\(HTTP \d{3}\)\)$/.test(m.text))&&(
                   <div style={{marginTop:6}}>
-                    <button onClick={()=>retryReply(i)} style={{fontSize:12,padding:"4px 10px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa",color:"#555",cursor:"pointer"}}>다시 시도</button>
+                    <button onClick={()=>retryReply(i)} style={{fontSize:12,padding:"4px 10px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa",color:"#555",cursor:"pointer"}}>{t("다시 시도")}</button>
                   </div>
                 )}
-                {m.translation&&<TransBlock translation={m.translation} alternatives={m.alternatives} isMe={isMe} onRetry={()=>retryTranslate(i)}/>}
+                {m.translation&&<TransBlock text={m.text} translation={m.translation} alternatives={m.alternatives} isMe={isMe} onRetry={()=>retryTranslate(i)}/>}
               </div>
             </div>
           );
@@ -938,15 +965,15 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
       }}>
         <textarea value={input} onChange={e=>setInput(e.target.value.slice(0,500))}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}}
-          placeholder={`${persona.name}에게 메시지 보내기...`} rows={1}
+          placeholder={`${persona.name} · ${t("메시지")}`} rows={1}
           style={{flex:1,border:"1.5px solid #ddd",borderRadius:12,padding:"10px 13px",fontSize:14,resize:"none",outline:"none",fontFamily,lineHeight:1.5,maxHeight:120,overflowY:"auto"}}/>
-        <button onClick={sendMessage} disabled={!input.trim() || aiLoading} aria-label="전송" style={{width:42,height:42,borderRadius:12,border:"none",background:input.trim()?"#4a9fff":"#ccc",cursor:input.trim()?"pointer":"default",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
+        <button onClick={sendMessage} disabled={!input.trim() || aiLoading} aria-label={t("전송")} style={{width:42,height:42,borderRadius:12,border:"none",background:input.trim()?"#4a9fff":"#ccc",cursor:input.trim()?"pointer":"default",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
       </div>
       {input.length>400&&(
         <div style={{textAlign:"right",padding:"0 14px 6px",fontSize:11,color:input.length>=500?"#e05555":"#aaa",background:"#fff"}}>{input.length}/500</div>
       )}
       {rateLimitMsg&&(
-        <div style={{textAlign:"center",padding:"0 14px 8px",fontSize:12,color:"#e05555",background:"#fff"}}>{rateLimitMsg}</div>
+        <div style={{textAlign:"center",padding:"0 14px 8px",fontSize:12,color:"#e05555",background:"#fff"}}>{t(rateLimitMsg)}</div>
       )}
     </div>
   );
@@ -954,6 +981,7 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
 
 // ── App ──
 export default function App() {
+  useLanguage();
   const [screen,setScreen]=useState<"loading"|"consent"|"landing"|"list"|"setup"|"chat">("loading");
   const [personas,setPersonas]=useState<Persona[]>([]);
   const [activeId,setActiveId]=useState<string|null>(null);
@@ -964,7 +992,7 @@ export default function App() {
     if(screen==="loading" || screen==="consent") return;
     const receive=async (open=false, targetId?:string)=>{
       const pending=await takeDueCheckIn();
-      if(pending) setPersonas(prev=>prev.map(p=>p.id===pending.personaId ? {...p,messages:[...p.messages,{role:"ai",text:pending.text,translation:"How have you been? I'd love to hear how your days have been. Talk to me whenever you feel like it.",alternatives:[]}]} : p));
+      if(pending) setPersonas(prev=>prev.map(p=>p.id===pending.personaId ? {...p,messages:[...p.messages,{role:"ai",text:pending.text,translation:"",alternatives:[]}]} : p));
       const id=targetId || pending?.personaId;
       if(open && id && currentPersonas.current.some(p=>p.id===id)) navigate("chat",id);
     };
@@ -1007,6 +1035,7 @@ export default function App() {
   async function revokeConsent() {
     await cancelCheckIn();
     await storageSet(CONSENT_KEY, "", false);
+    setWeatherEnabled(false);
     window.location.reload();
   }
 
@@ -1053,7 +1082,7 @@ export default function App() {
     navigate("chat", id);
   }
   function exportBackup() {
-    const blob = new Blob([JSON.stringify(personas, null, 2)], {type:"application/json"});
+    const blob = new Blob([JSON.stringify({version:2,personas,phrases:readPhrases()}, null, 2)], {type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const ymd = new Date().toISOString().slice(0,10);
@@ -1069,18 +1098,21 @@ export default function App() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result));
-        if(!isPersonaList(parsed)) throw new Error("invalid format");
-        setPersonas(parsed as Persona[]);
+        const imported = Array.isArray(parsed) ? parsed : parsed?.version===2 ? parsed.personas : null;
+        const phrases = Array.isArray(parsed) ? [] : parsed.phrases;
+        if(!isPersonaList(imported) || !validPhrases(phrases)) throw new Error("invalid format");
+        writePhrases(phrases);
+        setPersonas(imported as Persona[]);
       } catch {
-        window.alert("백업 파일을 읽을 수 없어요. 형식을 확인해주세요.");
+        window.alert(t("백업 파일을 읽을 수 없어요. 형식을 확인해주세요."));
       }
     };
     reader.readAsText(file);
   }
   const active=personas.find(p=>p.id===activeId);
 
-  const fl=<FontLoader/>;
-  if(screen==="loading") return <>{fl}<div style={{minHeight:"100vh",background:"linear-gradient(145deg,#c9b8f0 0%,#a8c4f0 40%,#b8d4f8 70%,#d4e8ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DEFAULT_FONT_FAMILY}}><div style={{color:"#7777bb",fontSize:15}}>SweetTalk 불러오는 중...</div></div></>;
+  const fl=<><FontLoader/>{["consent","landing"].includes(screen) && <FirstScreenSettings/>}</>;
+  if(screen==="loading") return <>{fl}<div style={{minHeight:"100vh",background:"linear-gradient(145deg,#c9b8f0 0%,#a8c4f0 40%,#b8d4f8 70%,#d4e8ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:DEFAULT_FONT_FAMILY}}><div style={{color:"#7777bb",fontSize:15}}>{t("SweetTalk 불러오는 중...")}</div></div></>;
   if(screen==="consent") return <>{fl}<ConsentGate onAgree={agreeConsent}/></>;
   if(screen==="landing") return <>{fl}<Landing onStart={()=>navigate("list")}/></>;
   if(screen==="list") {

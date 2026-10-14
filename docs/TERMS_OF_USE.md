@@ -1,11 +1,9 @@
-# SweetTalk Terms of Use
+SweetTalk 이용약관
 
-Effective date: 2026-09-13
+시행일: 2026-10-15. 문의: outintube@gmail.com
 
-SweetTalk provides AI-generated, fictional conversation with a fictional adult companion, including non-explicit romantic conversation. It is not a human relationship, therapist, emergency service, or professional advice service.
+만 18세 이상 서비스입니다. 필요한 국가에서는 미성년자의 이용에 보호자 동의가 필요합니다. 캐릭터는 18세 이상 가상의 성인이며 AI와의 비노골적 연인형 대화 및 언어 연습을 제공합니다. 실제 사람·상담사·응급 서비스가 아닙니다.
 
-Users must meet the minimum age shown in the app and must not use the service for sexual, exploitative, abusive, threatening, or unlawful content. AI responses can be inaccurate and should be reviewed before being relied upon.
+성적·착취적·학대적·위협적·불법 콘텐츠와 미성년자 관련 연애 역할극을 금지합니다. 입력과 출력을 안전 검사하며 위험 요청을 거절할 수 있습니다. AI와 번역은 부정확할 수 있습니다. 의료·법률 등 전문 판단을 대신하지 않습니다.
 
-If a user is in immediate danger, experiencing abuse, or considering self-harm, they should contact a trusted person and local emergency or crisis services.
-
-The minimum user age is 14. Characters must be aged 18 or older. Sexual content is prohibited. AI output is fictional and may be inaccurate. Report inappropriate responses using the response report link or contact outintube@gmail.com. Reports are reviewed by the operator; no response-time guarantee is implied. The app has no user-to-user messaging.
+신고 버튼으로 문제를 작성하거나 운영자에게 문의하세요. 이메일을 보내기 전 개인정보를 제거하세요. 즉각적인 위험에서는 신뢰하는 사람과 지역 응급 서비스의 도움을 받으세요. 계정·결제·사용자 간 메시지 기능은 없습니다.

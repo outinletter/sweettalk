@@ -1,3 +1,4 @@
+import { t, getLanguage } from "./i18n";
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
@@ -23,12 +24,12 @@ function read(): State {
 function write(state: State) { localStorage.setItem(KEY, JSON.stringify(state)); }
 export function checkInEnabled() { return read().enabled; }
 function nextCheckIn(friend: Friend): CheckIn {
-  return { personaId: friend.id, text: '잘 지내고 있어? 요즘 하루는 어땠는지 궁금해. 편할 때 이야기해 줘.', due: Date.now() + FOUR_DAYS };
+  return { personaId: friend.id, text: ({ko:'잘 지내고 있어? 편할 때 이야기해 줘.',en:'How have you been? Chat whenever you feel like it.',ja:'元気にしてる？都合のよい時に話してね。','zh-CN':'最近怎么样？有空时来聊聊吧。'})[getLanguage()], due: Date.now() + FOUR_DAYS };
 }
 async function schedule(friend: Friend, pending: CheckIn) {
   await LocalNotifications.cancel({ notifications: [{ id: ID }] });
-  if ((await LocalNotifications.checkPermissions()).display !== 'granted') throw new Error('아이폰 설정에서 SweetTalk 알림을 허용해 주세요.');
-  await LocalNotifications.schedule({ notifications: [{ id: ID, title: friend.name.slice(0,60), body: pending.text, schedule: { at: new Date(pending.due) }, extra: { personaId: friend.id } }] });
+  if ((await LocalNotifications.checkPermissions()).display !== 'granted') throw new Error(t('아이폰 설정에서 SweetTalk 알림을 허용해 주세요.'));
+  await LocalNotifications.schedule({ notifications: [{ id: ID, title: `${friend.name.slice(0,60)} · AI`, body: pending.text, schedule: { at: new Date(pending.due) }, extra: { personaId: friend.id } }] });
 }
 export function setCheckInEnabled(enabled: boolean, friend: Friend) {
   return serial(async () => {
@@ -37,8 +38,8 @@ export function setCheckInEnabled(enabled: boolean, friend: Friend) {
       write({ enabled: false });
       return;
     }
-    if (!Capacitor.isNativePlatform()) throw new Error('안부 알림은 설치된 앱에서 사용할 수 있어요.');
-    if ((await LocalNotifications.requestPermissions()).display !== 'granted') throw new Error('알림 권한이 허용되지 않았어요.');
+    if (!Capacitor.isNativePlatform()) throw new Error(t('안부 알림은 설치된 앱에서 사용할 수 있어요.'));
+    if ((await LocalNotifications.requestPermissions()).display !== 'granted') throw new Error(t('알림 권한이 허용되지 않았어요.'));
     const pending = nextCheckIn(friend);
     await schedule(friend, pending);
     write({ enabled: true, pending });

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readPhrases,writePhrases,savePhrase,validPhrases} from '../src/phrasebook.ts';
+const store=new Map();globalThis.localStorage={getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)};
+const phrase={text:'Hello',translation:'안녕하세요',language:'en'};
+savePhrase(phrase);savePhrase(phrase);assert.equal(readPhrases().length,1);
+assert.equal(validPhrases([{...phrase,language:'xx'}]),false);
+assert.throws(()=>writePhrases([{...phrase,text:null}]));assert.equal(readPhrases().length,1);
+writePhrases([]);assert.equal(readPhrases().length,0);
+store.set('sweettalk:phrasebook','bad JSON');assert.deepEqual(readPhrases(),[]);
+console.log('Phrasebook validation: duplicate, invalid write, deletion and corrupt storage checks passed.');

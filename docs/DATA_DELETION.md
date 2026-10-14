@@ -1,3 +1,9 @@
-# SweetTalk Data Deletion
+# SweetTalk 데이터 삭제
 
-SweetTalk stores app data locally on the device and does not require an account. Use the in-app conversation deletion and persona deletion controls, or uninstall the app, to remove local data. Imported backups and exported backup files must be deleted separately from the device or cloud storage where the user saved them.
+계정이 없으므로 계정 탈퇴가 필요하지 않습니다.
+
+- 대화 설정에서 해당 대화 기록 삭제
+- 목록에서 캐릭터 삭제
+- 첫 화면 환경설정에서 모든 기기 데이터 삭제: 대화·캐릭터·번역 캐시·표현집·입력 위치·동의 및 알림 설정 삭제와 예약 알림 취소. 선택 언어는 유지.
+- 내보낸 백업 파일은 저장 위치에서 별도로 삭제
+- 외부 서비스가 이미 처리한 데이터는 로컬 삭제로 제거되지 않음. 개인정보·삭제 요청은 outintube@gmail.com으로 문의. 운영자는 필요한 경우 제공자 협조를 요청해야 함.

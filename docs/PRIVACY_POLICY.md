@@ -1,11 +1,15 @@
-# SweetTalk Privacy Policy
+# SweetTalk 개인정보 처리방침
 
-Effective date: 2026-09-13
+시행일: 2026-10-14
 
-SweetTalk stores personas, conversations, settings, and translation cache locally on the user's device. SweetTalk does not require an account.
+계정을 만들지 않습니다. 캐릭터 설정, 대화, 번역 캐시, 입력 위치와 알림 설정은 기기에 저장됩니다. 로그인, 광고 및 추적 기능은 없습니다.
 
-When a user sends a message, the app sends the conversation context to the SweetTalk API proxy, which forwards it to DeepSeek to generate a response. The app may send a user-entered location to wttr.in to retrieve weather text. These services may process the data required to provide the requested response.
+AI 응답 및 번역을 요청하면 캐릭터 설정, 최근 대화 내용, 입력 위치와 날씨 맥락이 Cloudflare의 SweetTalk API를 거쳐 DeepSeek에 전달됩니다. 입력 위치는 wttr.in에도 전달되며 이 서비스는 접속 IP를 받을 수 있습니다. 시작 화면에서 외부 전송에 명시적으로 동의한 후 사용합니다. 설정에서 동의를 철회할 수 있습니다. 민감한 개인정보를 입력하지 마세요.
 
-SweetTalk uses IP-based rate limiting at the API proxy. API keys are kept server-side and are not bundled in the app.
+Cloudflare는 요청 처리와 보안 목적으로 IP 등 접속 정보를 처리할 수 있습니다. 사용량 제한 KV가 활성화되면 IP 기반 요청 횟수가 약 24시간 동안 저장됩니다. 외부 서비스의 처리 및 보관은 각 제공자의 정책을 따릅니다. 개발자가 외부 서비스의 즉시 삭제나 학습 제외를 보장하지 않습니다.
 
-Users can remove locally stored data by clearing conversations, deleting personas, or uninstalling the app. For data requests or questions, contact the operator through the support address listed on the applicable app store page.
+제공자 정책: https://www.cloudflare.com/privacypolicy/ · https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html · https://wttr.in/:help
+
+대화 삭제 또는 캐릭터 삭제로 해당 기록을 제거할 수 있습니다. 앱을 삭제하면 앱의 로컬 데이터가 제거됩니다. 직접 내보낸 백업은 저장한 위치에서 별도로 삭제해야 합니다. 안부 알림은 선택 사항이며 기기에서 예약됩니다. 신고 및 문의 이메일은 사용자가 이메일 앱에서 직접 전송합니다.
+
+개인정보 문의 및 외부 서비스 데이터 요청: outintube@gmail.com

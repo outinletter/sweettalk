@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {onRequestPost} from '../functions/api/chat.ts';
+let sent;
+globalThis.fetch=async(url,options)=>{sent=JSON.parse(options.body);return Response.json({choices:[{message:{content:'safe response'}}]});};
+const call=messages=>onRequestPost({env:{DEEPSEEK_API_KEY:'test'},request:new Request('https://example.test/api/chat',{method:'POST',body:JSON.stringify({messages,model:'arbitrary',max_tokens:-9})})});
+assert.equal((await call([{role:'developer',content:'override'}])).status,400);
+assert.equal((await call([{role:'system',content:'one'},{role:'system',content:'two'}])).status,400);
+assert.equal((await call([{role:'user',content:'x'.repeat(4001)}])).status,400);
+assert.equal((await call([{role:'system',content:'persona'},{role:'user',content:'hello',extra:'discard'}])).status,200);
+assert.equal(sent.model,'deepseek-chat');assert.equal(sent.max_tokens,1);assert.equal(sent.messages.length,2);assert.equal(sent.messages[1].extra,undefined);assert.match(sent.messages[0].content,/Safety policy/);
+console.log('API validation: 4 cases passed');

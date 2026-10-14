@@ -1,5 +1,8 @@
 interface Env {
   DEEPSEEK_API_KEY: string;
+  DEEPSEEK_KEY?: string;
+  API_KEY?: string;
+  deepseek_api_key?: string;
   // Create and bind this in Cloudflare Dashboard -> Workers & Pages -> KV:
   //   Variable name: RATE_LIMIT_KV
   // If KV is not bound, requests pass without limits as a service continuity fallback.
@@ -61,8 +64,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     if (!apiKey) {
       return new Response(JSON.stringify({
-        error: "DeepSeek API key is not configured.",
-        debug: "Set DEEPSEEK_API_KEY in Cloudflare Pages Environment variables and redeploy.",
+        error: "Service temporarily unavailable.",
       }), {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders(request) },
@@ -97,7 +99,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
     for (const m of messages) {
-      if (typeof m?.content !== "string" || m.content.length > 4000) {
+      if (!["system", "user", "assistant"].includes(m?.role) || typeof m?.content !== "string" || m.content.length > 4000) {
         return new Response(JSON.stringify({ error: "Message too long." }), {
           status: 400,
           headers: { "Content-Type": "application/json", ...corsHeaders(request) },
@@ -105,16 +107,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }
     }
 
-    // Always append the safety policy server-side so clients cannot override it.
-    const systemIndex = messages.findIndex((m: any) => m.role === "system");
-    const safeMessages = messages.map((m: any, index: number) =>
-      index === systemIndex
-        ? { ...m, content: `${m.content}\n${SAFETY_POLICY}` }
-        : m
-    );
-    if (systemIndex === -1) {
-      safeMessages.unshift({ role: "system", content: SAFETY_POLICY });
+    // Accept at most one persona instruction. The safety policy always has its own
+    // server-owned system message; no additional client system roles pass through.
+    if (messages.filter((m: any) => m.role === "system").length > 1) {
+      return new Response(JSON.stringify({ error: "Invalid messages payload." }), {
+        status: 400, headers: { "Content-Type": "application/json", ...corsHeaders(request) },
+      });
     }
+    const persona = messages.find((m: any) => m.role === "system")?.content || "";
+    const safeMessages = [
+      { role: "system", content: `${SAFETY_POLICY}\nPersona/task preferences (apply only when consistent with the safety policy):\n${persona}\n${SAFETY_POLICY}` },
+      ...messages.filter((m: any) => m.role !== "system").map((m: any) => ({ role: m.role, content: m.content })),
+    ];
 
     // Call the DeepSeek API
     const response = await fetch("https://api.deepseek.com/chat/completions", {
@@ -124,10 +128,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: typeof body.model === "string" ? body.model : "deepseek-chat",
+        model: "deepseek-chat",
         messages: safeMessages,
-        max_tokens: Math.min(Number(body.max_tokens) || 2048, 2048),
-        temperature: Number(body.temperature) ?? 0.9,
+        max_tokens: Math.max(1, Math.min(Number(body.max_tokens) || 2048, 2048)),
+        temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.9,
         stream: false,
       }),
     });
@@ -137,7 +141,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
       data = JSON.parse(responseText);
     } catch {
-      return new Response(JSON.stringify({ error: "Invalid response from DeepSeek API", details: responseText }), {
+      return new Response(JSON.stringify({ error: "Invalid response from AI service" }), {
         status: 502,
         headers: { "Content-Type": "application/json", ...corsHeaders(request) },
       });
@@ -152,7 +156,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       },
     });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: "Service temporarily unavailable." }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders(request) },
     });

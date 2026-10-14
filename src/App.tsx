@@ -41,7 +41,8 @@ const DEFAULT_FONT_FAMILY = FONT_OPTIONS[1].value; // Noto Sans KR 기본
 const ICON_URL = "/SweetTalk.jpg"; // 로컬 번들 — 오프라인에서도 깨지지 않음
 const STORAGE_KEY = "personas_v1";
 const CONSENT_KEY = "consent_v2";
-const PRIVACY_URL = "https://outinletter.github.io/privacy-policy/";
+const PRIVACY_URL = "/privacy.html";
+const TERMS_URL = "/terms.html";
 const SUPPORT_EMAIL = "outintube@gmail.com";
 const LAST_SCREEN_KEY = "last_screen_v1";
 const LAST_EXPORT_KEY = "last_export_v1";
@@ -322,7 +323,8 @@ function ConsentGate({onAgree}:{onAgree:()=>void}) {
           AI 응답과 번역을 위해 대화 내용과 캐릭터 설정이 Cloudflare를 통해 DeepSeek에 전송됩니다. 입력한 위치는 날씨 조회를 위해 wttr.in에, 대화 맥락을 위해 DeepSeek에 전송됩니다. 민감한 개인정보는 입력하지 마세요.
         </div>
         <div style={{fontSize:13,marginBottom:16}}>
-          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">개인정보 처리방침</a>
+          <a href={PRIVACY_URL}>개인정보 처리방침</a>
+          {" · "}<a href={TERMS_URL}>이용약관</a>
           {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>문의하기</a>
         </div>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#333",marginBottom:20,cursor:"pointer"}}>
@@ -569,7 +571,8 @@ function SettingsTab({friend,fontSize,setFontSize,fontFamily,setFontFamily,locat
           <button onClick={onClose} aria-label="닫기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}}>✕</button>
         </div>
         <div style={{fontSize:13,lineHeight:1.8,marginBottom:20}}>
-          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">개인정보 처리방침</a>
+          <a href={PRIVACY_URL}>개인정보 처리방침</a>
+          {" · "}<a href={TERMS_URL}>이용약관</a>
           {" · "}<a href={`mailto:${SUPPORT_EMAIL}`}>문의하기</a><br/>
           <button onClick={onRevokeConsent} style={{marginTop:8,padding:"8px 12px",cursor:"pointer"}}>외부 데이터 전송 동의 철회</button>
         </div>
@@ -874,7 +877,7 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
           <button onClick={onBack} aria-label="뒤로가기" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#555",padding:"0 4px"}}>‹</button>
           <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,color:"#6a8fff"}}>{persona.name[0]}</div>
           <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{persona.name}</div>
+            <div style={{fontWeight:700,fontSize:15,color:"#111"}}>{persona.name} · AI</div>
             <div style={{fontSize:10,color:"#999"}}>{persona.age}세 · {persona.personality}</div>
           </div>
           <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:"#555"}}>편집</button>
@@ -897,9 +900,10 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
           const isMe=m.role==="user";
           return (
             <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
-              {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name}</div>}
+              {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name} · AI</div>}
               <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
                 {m.text}
+                {!isMe && <div style={{marginTop:6}}><a aria-label="AI 응답 신고" style={{fontSize:12,color:"#666"}} href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("SweetTalk AI 응답 신고")}&body=${encodeURIComponent("문제 유형과 내용을 적어주세요. 개인정보는 제외해주세요.\n\n신고할 응답을 직접 입력해주세요:")}`}>응답 신고</a></div>}
                 {!isMe&&(FAILURE_TEXTS.has(m.text) || /\(HTTP \d{3}\)\)$/.test(m.text))&&(
                   <div style={{marginTop:6}}>
                     <button onClick={()=>retryReply(i)} style={{fontSize:12,padding:"4px 10px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa",color:"#555",cursor:"pointer"}}>다시 시도</button>
@@ -912,7 +916,7 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
         })}
         {aiLoading&&(
           <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-            <div style={{fontSize:11.5,color:"#999",marginTop:2}}>{persona.name}</div>
+            <div style={{fontSize:11.5,color:"#999",marginTop:2}}>{persona.name} · AI</div>
             <div style={{background:"#fff",borderRadius:"4px 16px 16px 16px",padding:"6px 12px",boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}><TypingDots/></div>
           </div>
         )}

@@ -327,13 +327,14 @@ function LanguageControls() {
 function FirstScreenSettings() {
   const [open,setOpen]=useState(false);
   const [confirm,setConfirm]=useState(false);
-  return <><button aria-label={t("환경설정")} onClick={()=>setOpen(true)} style={{position:"fixed",right:"max(12px, calc((100vw - 500px)/2 + 12px))",top:"calc(10px + env(safe-area-inset-top, 0px))",zIndex:400,padding:"8px 12px",borderRadius:10,border:"1px solid #bbb",background:"white"}}>⚙ {t("환경설정")}</button>
-    {open&&<div role="dialog" aria-modal="true" aria-label={t("환경설정")} style={{position:"fixed",inset:0,zIndex:500,background:"#0006",display:"grid",placeItems:"center",padding:20}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:420,maxHeight:"85vh",overflow:"auto"}}>
-      <h2>{t("환경설정")}</h2><LanguageControls/><PhraseBook/>
+  const actionButton: CSSProperties = {width:"100%",minHeight:48,padding:"12px 16px",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"};
+  return <><button aria-label="LANGUGE" onClick={()=>setOpen(true)} style={{position:"fixed",right:"max(12px, calc((100vw - 500px)/2 + 12px))",top:"calc(10px + env(safe-area-inset-top, 0px))",zIndex:400,padding:"8px 12px",borderRadius:10,border:"1px solid #bbb",background:"white"}}>🌐 LANGUGE</button>
+    {open&&<div role="dialog" aria-modal="true" aria-label="LANGUGE" style={{position:"fixed",inset:0,zIndex:500,background:"#0006",display:"grid",placeItems:"center",padding:20}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:420,maxHeight:"85vh",overflow:"auto"}}>
+      <h2>LANGUGE</h2><LanguageControls/><PhraseBook/>
       <p><a href="/privacy.html">{t("개인정보 처리방침")}</a> · <a href="/terms.html">{t("이용약관")}</a></p>
-      <button onClick={()=>setConfirm(true)}>{t("모든 기기 데이터 삭제")}</button>
+      <button style={{...actionButton,marginTop:16,border:"1px solid #e89b9b",background:"#fff0f0",color:"#a52222"}} onClick={()=>setConfirm(true)}>{t("모든 기기 데이터 삭제")}</button>
       {confirm&&<div role="alert"><p>{t("정말 삭제할까요? 되돌릴 수 없어요.")}</p><button onClick={()=>setConfirm(false)}>{t("취소")}</button><button onClick={async()=>{await cancelCheckIn();const lang=getLanguage();Object.keys(localStorage).filter(k=>k.startsWith("sweettalk:")).forEach(k=>localStorage.removeItem(k));setLanguage(lang);window.location.reload();}}>{t("삭제하기")}</button></div>}
-      <p><button onClick={()=>setOpen(false)}>{t("닫기")}</button></p>
+      <p style={{marginTop:12}}><button style={{...actionButton,border:"none",background:grad,color:"white"}} onClick={()=>setOpen(false)}>{t("닫기")}</button></p>
     </div></div>}
   </>;
 }

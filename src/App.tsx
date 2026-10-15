@@ -40,6 +40,8 @@ const FONT_OPTIONS: {label:string; value:string}[] = [
   {label:"Gamja Flower (손글씨 감성)", value:"'Gamja Flower','Apple SD Gothic Neo',sans-serif"},
 ];
 const DEFAULT_FONT_FAMILY = FONT_OPTIONS[1].value; // Noto Sans KR 기본
+// 언어 설정은 사용자가 선택한 대화 글꼴과 무관하게 OS 기본 산세리프를 사용한다.
+const SETTINGS_FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const ICON_URL = "/SweetTalk.jpg"; // 로컬 번들 — 오프라인에서도 깨지지 않음
 const STORAGE_KEY = "personas_v1";
 const CONSENT_KEY = "consent_v3";
@@ -328,8 +330,8 @@ function FirstScreenSettings() {
   const [open,setOpen]=useState(false);
   const [confirm,setConfirm]=useState(false);
   const actionButton: CSSProperties = {width:"100%",minHeight:48,padding:"12px 16px",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"};
-  return <><button aria-label="LANGUGE" onClick={()=>setOpen(true)} style={{position:"fixed",right:"max(12px, calc((100vw - 500px)/2 + 12px))",top:"calc(10px + env(safe-area-inset-top, 0px))",zIndex:400,padding:"8px 12px",borderRadius:10,border:"1px solid #bbb",background:"white"}}>🌐 LANGUGE</button>
-    {open&&<div role="dialog" aria-modal="true" aria-label="LANGUGE" style={{position:"fixed",inset:0,zIndex:500,background:"#0006",display:"grid",placeItems:"center",padding:20}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:420,maxHeight:"85vh",overflow:"auto"}}>
+  return <><button aria-label="LANGUGE" onClick={()=>setOpen(true)} style={{position:"fixed",right:"max(12px, calc((100vw - 500px)/2 + 12px))",top:"calc(10px + env(safe-area-inset-top, 0px))",zIndex:400,padding:"8px 12px",borderRadius:10,border:"1px solid #bbb",background:"white",fontFamily:SETTINGS_FONT_FAMILY}}>🌐 LANGUGE</button>
+    {open&&<div role="dialog" aria-modal="true" aria-label="LANGUGE" style={{position:"fixed",inset:0,zIndex:500,background:"#0006",display:"grid",placeItems:"center",padding:20,fontFamily:SETTINGS_FONT_FAMILY}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:420,maxHeight:"85vh",overflow:"auto",fontFamily:SETTINGS_FONT_FAMILY}}>
       <h2>LANGUGE</h2><LanguageControls/><PhraseBook/>
       <p><a href="/privacy.html">{t("개인정보 처리방침")}</a> · <a href="/terms.html">{t("이용약관")}</a></p>
       <button style={{...actionButton,marginTop:16,border:"1px solid #e89b9b",background:"#fff0f0",color:"#a52222"}} onClick={()=>setConfirm(true)}>{t("모든 기기 데이터 삭제")}</button>

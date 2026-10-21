@@ -1,4 +1,6 @@
 import { readPhrases, writePhrases, savePhrase, validPhrases } from "./phrasebook";
+import { Practice, copy } from './practice';
+import { exportBackupFile } from './backup';
 import { t, languages, useLanguage, getLanguage, setLanguage, languageName, translationLanguage, weatherEnabled, setWeatherEnabled } from "./i18n";
 import { checkInEnabled, setCheckInEnabled, recordCheckInActivity, cancelCheckIn, takeDueCheckIn, listenForCheckIn } from "./checkIn";
 import { useState, useRef, useEffect, useCallback, CSSProperties } from "react";
@@ -293,7 +295,7 @@ function TransBlock({text,translation,alternatives,isMe,onRetry}:{text:string;tr
       <button
         type="button"
         aria-expanded={open}
-        aria-label={open ? t("영어 번역 접기") : t("영어 번역 펼치기")}
+        aria-label={open ? copy('번역 접기','Hide translation','翻訳を閉じる','收起翻译') : copy('번역 펼치기','Show translation','翻訳を表示','展开翻译')}
         onClick={()=>setOpen(o=>!o)}
         style={{cursor:"pointer",fontWeight:600,userSelect:"none",marginBottom:4,fontSize:12,color:labelColor,fontFamily:ff,background:"none",border:"none",padding:0}}
       >
@@ -345,8 +347,8 @@ function PhraseBook() {
   const [revealed,setRevealed]=useState<Record<number,boolean>>({});
   return <section style={{margin:"16px 0"}}><h3>{t("저장한 표현 복습")}</h3>{!phrases.length&&<p>{t("대화에서 번역 옆 별 버튼으로 표현을 저장하세요.")}</p>}{phrases.map((p,i)=><div key={i} style={{borderTop:"1px solid #ddd",padding:"12px 0"}}><p>{p.text}</p>{revealed[i]&&<p>{p.translation}</p>}<button onClick={()=>setRevealed(v=>({...v,[i]:!v[i]}))}>{t("번역 확인")}</button><button onClick={()=>{const next=phrases.filter((_,j)=>j!==i);writePhrases(next);setPhrases(next);setRevealed({});}}>{t("삭제")}</button></div>)}</section>;
 }
-function ReportDialog({onClose}:{onClose:()=>void}) {
-  const [text,setText]=useState("");
+function ReportDialog({onClose,initialText=''}:{onClose:()=>void;initialText?:string}) {
+  const [text,setText]=useState(initialText.slice(0,2000));
   const [copied,setCopied]=useState(false);
   return <div role="dialog" aria-modal="true" aria-label={t("신고 문의")} style={{position:"fixed",inset:0,zIndex:600,background:"#0006",display:"grid",placeItems:"center",padding:20}}><div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:440}}>
     <h2>{t("신고 문의")}</h2><p>{t("신고 내용을 복사한 뒤 아래 지원 페이지에서 문의할 수 있습니다.")}</p>
@@ -405,8 +407,8 @@ function Landing({onStart}:{onStart:()=>void}) {
             <div key={t(f.title)} style={{...glass,borderRadius:16,padding:"16px 18px",display:"flex",alignItems:"flex-start",gap:14}}>
               <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#e8ecff,#d8d0ff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{f.icon}</div>
               <div>
-                <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e",marginBottom:3}}>{t(f.title)}</div>
-                <div style={{fontSize:12.5,color:"#6666aa",lineHeight:1.6,whiteSpace:"pre-line"}}>{t(f.text)}</div>
+                <div style={{fontWeight:700,fontSize:15,color:"#1a1a3e",marginBottom:3}}>{f.icon==='⭐'?copy('표현 저장과 복습','Save and practice phrases','表現を保存・復習','保存和复习表达'):t(f.title)}</div>
+                <div style={{fontSize:12.5,color:"#6666aa",lineHeight:1.6,whiteSpace:"pre-line"}}>{f.icon==='⭐'?copy('대체 표현 1가지와 저장한 표현 다시 쓰기','One alternative expression and saved-phrase practice','別の表現を1つ・保存した表現の練習','一种替代表达和已保存表达练习'):f.icon==='🔤'?copy('영어 대화는 한국어로, 그 외 언어는 영어로 번역','English chats translate to Korean; other languages to English','英語は韓国語に、他の言語は英語に翻訳','英语译为韩语，其他语言译为英语'):t(f.text)}</div>
               </div>
             </div>
           ))}
@@ -691,11 +693,14 @@ function SettingsTab({friend,fontSize,setFontSize,fontFamily,setFontFamily,locat
 
 // ── Chat ──
 function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;onBack:()=>void;onRevokeConsent:()=>void;updatePersona:(id:string,fn:(p:Persona)=>Persona)=>void}) {
+  const [practiceOpen,setPracticeOpen]=useState(false);
   const [aiLoading,setAiLoading]=useState(false);
   const [input,setInput]=useState("");
   const [showEdit,setShowEdit]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const [reportOpen,setReportOpen]=useState(false);
+  const [reportText,setReportText]=useState('');
+  const [hiddenReplies,setHiddenReplies]=useState<Set<number>>(new Set());
   const [fontSize,setFontSize]=useState(DEFAULT_FONT_SIZE);
   const [fontFamily,setFontFamily]=useState(DEFAULT_FONT_FAMILY);
   const [location,setLocation]=useState("");
@@ -914,26 +919,29 @@ function Chat({persona,onBack,updatePersona,onRevokeConsent}:{persona:Persona;on
             <div style={{fontSize:10,color:"#999"}}>{persona.age}{t("세 ·")}{t(persona.personality)}</div>
           </div>
           <button onClick={()=>setShowEdit(true)} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:"#555"}}>{t("편집")}</button>
+          <button onClick={()=>setPracticeOpen(true)} style={{padding:10,minHeight:44,border:'1px solid #aaa',borderRadius:8,background:'#eef2ff'}}>{copy('연습','Practice','練習','练习')}</button>
           <button onClick={()=>setShowSettings(true)} aria-label={t("설정")} style={{background:"none",border:"1.5px solid #ddd",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:14,color:"#888"}}>⚙️</button>
         </div>
       </div>
+      {practiceOpen&&<div role="dialog" aria-modal="true" aria-label={copy('연습','Practice','練習','练习')} style={{position:'fixed',inset:0,zIndex:450,background:'#0006',display:'grid',placeItems:'center',padding:16}}><div style={{background:'white',width:'100%',maxWidth:480,maxHeight:'85vh',overflow:'auto',borderRadius:16}}><button autoFocus onClick={()=>setPracticeOpen(false)} style={{padding:14,minHeight:44}}>{t('닫기')}</button><Practice onUse={text=>{setInput(text);setPracticeOpen(false);}}/></div></div>}
       {!isOnline&&(
         <div style={{background:"#fff3cd",color:"#8a6d1f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>{t("오프라인 상태입니다. 네트워크 연결을 확인해주세요.")}</div>
       )}
       {isOnline&&justReconnected&&(
         <div style={{background:"#e6f9ee",color:"#1f8a4f",fontSize:12,textAlign:"center",padding:"6px 0",flexShrink:0}}>{t("다시 연결되었어요. 메시지를 보낼 수 있어요.")}</div>
       )}
-      {reportOpen&&<ReportDialog onClose={()=>setReportOpen(false)}/>}
+      {reportOpen&&<ReportDialog initialText={reportText} onClose={()=>setReportOpen(false)}/>}
       {/* Messages */}
       <div style={{flex:1,overflowY:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:14}}>
         {persona.messages.map((m,i)=>{
           const isMe=m.role==="user";
+          if(!isMe&&hiddenReplies.has(i))return <div key={i}>{copy('숨긴 AI 응답','Hidden AI reply','非表示のAI応答','已隐藏的AI回复')} <button onClick={()=>setHiddenReplies(prev=>{const next=new Set(prev);next.delete(i);return next;})}>{copy('다시 표시','Show','表示','显示')}</button></div>;
           return (
             <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
               {!isMe&&<div style={{fontSize:11.5,fontWeight:600,color:"#777",marginBottom:3}}>{persona.name} · AI</div>}
               <div style={{maxWidth:"78%",background:isMe?"#4a9fff":"#fff",color:isMe?"#fff":"#111",borderRadius:isMe?"16px 4px 16px 16px":"4px 16px 16px 16px",padding:"10px 13px",fontSize:fontSize,lineHeight:1.6,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
                 {t(m.text)}
-                {!isMe && <div style={{marginTop:6}}><button onClick={()=>setReportOpen(true)} style={{fontSize:12}}>{t("응답 신고")}</button></div>}
+                {!isMe && <div style={{marginTop:6}}><button onClick={()=>{setReportText(m.text);setReportOpen(true);}} style={{fontSize:14,minHeight:44,padding:8}}>{t("응답 신고")}</button><button style={{fontSize:14,minHeight:44,padding:8}} onClick={()=>setHiddenReplies(prev=>new Set(prev).add(i))}>{copy('숨기기','Hide','非表示','隐藏')}</button></div>}
                 {!isMe&&(FAILURE_TEXTS.has(m.text) || /\(HTTP \d{3}\)\)$/.test(m.text))&&(
                   <div style={{marginTop:6}}>
                     <button onClick={()=>retryReply(i)} style={{fontSize:12,padding:"4px 10px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa",color:"#555",cursor:"pointer"}}>{t("다시 시도")}</button>
@@ -1084,17 +1092,17 @@ export default function App() {
     setPersonas(prev=>[...prev,{id,...profile,messages:[]}]);
     navigate("chat", id);
   }
-  function exportBackup() {
-    const blob = new Blob([JSON.stringify({version:2,personas,phrases:readPhrases()}, null, 2)], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const ymd = new Date().toISOString().slice(0,10);
-    a.href = url; a.download = `sweettalk-backup-${ymd}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  async function exportBackup() {
+    try {
+      await exportBackupFile(JSON.stringify({version:2,personas,phrases:readPhrases()},null,2));
+      if(!window.confirm(copy('백업 파일을 저장했나요? 저장한 경우에만 확인하세요.','Did you save the backup file? Only confirm after saving it.','バックアップファイルを保存しましたか？保存後のみ確認してください。','备份文件已保存吗？请在保存后确认。')))return;
     const now = Date.now();
     setLastExportAt(now);
     storageSet(LAST_EXPORT_KEY, String(now), false);
+    } catch(error) {
+      if((error as Error)?.name==='AbortError')return;
+      window.alert(copy('백업을 완료하지 못했어요. 다시 시도해주세요.','Backup was not completed. Please try again.','バックアップを完了できませんでした。再度お試しください。','备份未完成，请重试。'));
+    }
   }
   function importBackup(file: File) {
     const reader = new FileReader();

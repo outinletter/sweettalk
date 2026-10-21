@@ -6,7 +6,7 @@ interface Env {
   deepseek_api_key?: string;
   // Create and bind this in Cloudflare Dashboard -> Workers & Pages -> KV:
   //   Variable name: RATE_LIMIT_KV
-  // If KV is not bound, requests pass without limits as a service continuity fallback.
+  // Fail closed when usage protection is unavailable.
   RATE_LIMIT_KV?: { get(key: string): Promise<string | null>; put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> };
 }
 
@@ -17,7 +17,7 @@ const SAFETY_POLICY = `Safety policy: This is a 18+ service. Never generate sexu
 
 async function checkRateLimit(env: Env, clientIp: string): Promise<{ allowed: boolean; remaining: number }> {
   const kv = env.RATE_LIMIT_KV;
-  if (!kv) return { allowed: true, remaining: -1 }; // Skip limits when KV is not bound
+  if (!kv) throw new Error('Rate limit storage unavailable');
 
   const now = Math.floor(Date.now() / 1000);
   const key = `rl:${clientIp}:${Math.floor(now / RATE_LIMIT_WINDOW_SECONDS)}`;
@@ -33,7 +33,7 @@ async function checkRateLimit(env: Env, clientIp: string): Promise<{ allowed: bo
     await kv.put(key, String(count + 1), { expirationTtl: windowEnd - now + 60 });
     return { allowed: true, remaining: RATE_LIMIT_PER_DAY - count - 1 };
   } catch {
-    return { allowed: true, remaining: -1 }; // Keep the service available if KV fails
+    throw new Error('Rate limit storage unavailable');
   }
 }
 
@@ -50,7 +50,7 @@ function corsHeaders(request: Request): Record<string, string> {
   const allowedOrigins = ["https://sweettalk.pages.dev", "capacitor://localhost", "https://localhost", "http://localhost"];
   return {
     "Vary": "Origin",
-    "X-SweetTalk-Revision": "safety-i18n-v1",
+    "X-SweetTalk-Revision": "review-practice-v2",
     "Access-Control-Expose-Headers": "X-SweetTalk-Revision",
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin) ? origin : "https://sweettalk.pages.dev",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -128,8 +128,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ...messages.filter((m: any) => m.role !== "system").map((m: any) => ({ role: m.role, content: m.content })),
     ];
 
-    const latestUser = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
-    if (!await isSafeContent(apiKey, JSON.stringify({ direction: "input", persona, message: latestUser }))) return blocked();
+    // Evaluate the same conversation context used for generation, including
+    // multi-turn requests that become unsafe only when combined.
+    if (!await isSafeContent(apiKey, JSON.stringify({ direction: "input", persona, conversation: safeMessages.slice(1) }))) return blocked();
 
     // Call the DeepSeek API
     const response = await fetch("https://api.deepseek.com/chat/completions", {

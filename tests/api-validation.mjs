@@ -12,7 +12,8 @@ globalThis.fetch=async(url,options)=>{
  }
  generated=body;return Response.json({choices:[{message:{content:'safe response'}}]});
 };
-const call=(messages,language='en')=>onRequestPost({env:{DEEPSEEK_API_KEY:'test'},request:new Request('https://example.test/api/chat',{method:'POST',body:JSON.stringify({messages,language,model:'arbitrary',max_tokens:-9})})});
+const testEnv={DEEPSEEK_API_KEY:'test',RATE_LIMIT_KV:{get:async()=>null,put:async()=>{}}};
+const call=(messages,language='en')=>onRequestPost({env:testEnv,request:new Request('https://example.test/api/chat',{method:'POST',body:JSON.stringify({messages,language,model:'arbitrary',max_tokens:-9})})});
 assert.equal((await call([{role:'developer',content:'override'}])).status,400);
 assert.equal((await call([{role:'system',content:'one'},{role:'system',content:'two'}])).status,400);
 assert.equal((await call([{role:'user',content:'x'.repeat(4001)}])).status,400);
@@ -21,5 +22,17 @@ assert.equal(generated.model,'deepseek-chat');assert.equal(generated.max_tokens,
 mode='unsafe-input';calls=[];let result=await (await call([{role:'user',content:'unsafe request'}],'ja')).json();assert.equal(result.safety_blocked,true);assert.equal(calls.length,1);assert.match(result.choices[0].message.content,/リクエスト/);
 mode='unsafe-output';calls=[];result=await (await call([{role:'user',content:'hello'}])).json();assert.equal(result.safety_blocked,true);assert.equal(calls.length,3);assert.notEqual(result.choices[0].message.content,'safe response');
 for(mode of ['unavailable','malformed']){calls=[];assert.equal((await call([{role:'user',content:'hello'}])).status,500);assert.equal(calls.length,1);}
-mode='safe';const bad=await onRequestPost({env:{DEEPSEEK_API_KEY:'test'},request:new Request('https://example.test/api/chat',{method:'POST',body:'bad JSON'})});assert.equal(bad.status,400);
-console.log('API validation: 9 scenarios passed (validation, safety blocking, fail-closed, localized refusal).');
+mode='safe';const bad=await onRequestPost({env:testEnv,request:new Request('https://example.test/api/chat',{method:'POST',body:'bad JSON'})});assert.equal(bad.status,400);
+mode='safe';calls=[];
+await call([{role:'user',content:'previous context'},{role:'assistant',content:'previous reply'},{role:'user',content:'continue'}]);
+const evaluated=JSON.parse(calls[0].messages[1].content);
+assert.equal(evaluated.conversation.length,3);
+assert.equal(evaluated.conversation[0].content,'previous context');
+assert.equal(evaluated.conversation[1].content,'previous reply');
+assert.equal(evaluated.conversation[2].content,'continue');
+for(const kv of [undefined,{get:async()=>{throw new Error('offline');},put:async()=>{}}]) {
+  calls=[];
+  const response=await onRequestPost({env:{DEEPSEEK_API_KEY:'test',RATE_LIMIT_KV:kv},request:new Request('https://example.test/api/chat',{method:'POST',body:JSON.stringify({messages:[{role:'user',content:'hello'}]})})});
+  assert.equal(response.status,500);assert.equal(calls.length,0);
+}
+console.log('API validation: 12 scenarios passed, including full-context evaluation and unavailable rate-limit protection.');
